@@ -1,0 +1,185 @@
+# Build des images :cli et :web (amd64 + arm64 sur runners natifs), test de fumée,
+# publication sur GHCR et release GitHub avec versions.json.
+#
+#   pull_request        build + test de fumée (bloque la PR, y compris les PR Renovate)
+#   push sur main       build + test + publication :edge et :sha-…
+#   schedule (lundi)    rebuild sans cache (apt upgrade) + publication :cli, :web, :latest,
+#                       :vAAAA.MM.JJ-cli, :vAAAA.MM.JJ-web + release GitHub
+#   workflow_dispatch   comme schedule
+name: build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' }}
+      NO_CACHE: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Libérer de l'espace disque (images de plusieurs Go)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          docker system prune -af >/dev/null
+          df -h /
+
+      - name: Nom de l'image
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox" >> "$GITHUB_OUTPUT"
+
+      - name: Build :cli
+        run: |
+          args=(--pull)
+          [[ $NO_CACHE == true ]] && args+=(--no-cache)
+          docker build "${args[@]}" \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t cloudbox:cli -f image/cli/Dockerfile image/cli
+
+      - name: Test de fumée :cli
+        run: tests/smoke-cli.sh cloudbox:cli
+
+      - name: Build :web
+        run: |
+          args=()
+          [[ $NO_CACHE == true ]] && args+=(--no-cache)
+          docker build "${args[@]}" \
+            --build-arg BASE_IMAGE=cloudbox:cli \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t cloudbox:web -f image/web/Dockerfile .
+
+      - name: Test de fumée :web
+        run: tests/smoke-web.sh cloudbox:web
+
+      - name: Test navigateur du portail (Chromium headless)
+        run: tests/smoke-browser.sh cloudbox:web browser-out
+
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: captures-navigateur-${{ matrix.arch }}
+          path: tests/browser-out/
+          if-no-files-found: ignore
+
+      - name: Versions des outils
+        run: docker run --rm cloudbox:web cloudbox-versions --json > "versions-${{ matrix.arch }}.json"
+
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: versions-${{ matrix.arch }}
+          path: versions-${{ matrix.arch }}.json
+
+      - name: Connexion à GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publication des images de l'architecture
+        if: env.PUBLISH == 'true'
+        run: |
+          img=${{ steps.image.outputs.name }}
+          for v in cli web; do
+            docker tag "cloudbox:$v" "$img:build-${GITHUB_SHA}-$v-${{ matrix.arch }}"
+            docker push "$img:build-${GITHUB_SHA}-$v-${{ matrix.arch }}"
+          done
+
+  publish:
+    name: publication multi-arch
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    env:
+      STABLE: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Manifestes multi-arch et tags
+        id: tags
+        run: |
+          img=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox
+          short=${GITHUB_SHA::7}
+          date=v$(date -u +%Y.%m.%d)
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+          for v in cli web; do
+            tags=(-t "$img:sha-$short-$v")
+            if [[ $v == web ]]; then
+              tags+=(-t "$img:edge")
+            fi
+            if [[ $STABLE == true ]]; then
+              tags+=(-t "$img:$v" -t "$img:$date-$v")
+              [[ $v == web ]] && tags+=(-t "$img:latest")
+            fi
+            docker buildx imagetools create "${tags[@]}" \
+              "$img:build-${GITHUB_SHA}-$v-amd64" "$img:build-${GITHUB_SHA}-$v-arm64"
+          done
+
+      - uses: actions/download-artifact@v8.0.2
+        if: env.STABLE == 'true'
+        with:
+          pattern: versions-*
+          merge-multiple: true
+
+      - name: Release GitHub
+        if: env.STABLE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tags.outputs.date }}
+        run: |
+          jq -s '{amd64: .[0], arm64: .[1]}' versions-amd64.json versions-arm64.json > versions.json
+          {
+            echo "Images :"
+            echo
+            echo "- \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox:$TAG-web\` (= \`:web\`, \`:latest\`)"
+            echo "- \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox:$TAG-cli\` (= \`:cli\`)"
+            echo
+            echo "| Outil | Version |"
+            echo "|---|---|"
+            jq -r '.tools[] | "| \(.name) | \(.version) |"' versions-amd64.json
+          } > notes.md
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" versions.json --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --notes-file notes.md --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" versions.json --title "Cloudbox $TAG" --notes-file notes.md \
+              --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+          fi

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Installe dans le home les extensions code-server fournies par l'image (/opt/cloudbox/vsix),
+# quand elles manquent ou que l'image en apporte une autre version.
+set -euo pipefail
+
+shopt -s nullglob
+vsix=(/opt/cloudbox/vsix/*.vsix)
+(( ${#vsix[@]} )) || exit 0
+
+installed=$(code-server --list-extensions --show-versions 2>/dev/null | tr '[:upper:]' '[:lower:]')
+for f in "${vsix[@]}"; do
+    ref=$(basename "$f" .vsix)          # éditeur.nom@version
+    if ! grep -qxF "${ref,,}" <<<"$installed"; then
+        echo "[code-server] Installation de l'extension $ref"
+        code-server --install-extension "$f" --force >/dev/null
+    fi
+done

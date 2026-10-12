@@ -1,0 +1,4 @@
+# Cloudbox : dev ne peut exécuter en root que la configuration initiale du container, sans argument.
+# Le sudo complet est ajouté par cette configuration dans /etc/sudoers.d/cloudbox-dev
+# seulement si CLOUDBOX_SUDO=true.
+dev ALL=(root) NOPASSWD: /usr/local/sbin/cloudbox-root-init ""

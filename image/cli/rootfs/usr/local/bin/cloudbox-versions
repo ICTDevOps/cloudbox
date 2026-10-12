@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Affiche la version de chaque outil de l'image, en interrogeant réellement les binaires.
+#
+#   cloudbox-versions            tableau lisible
+#   cloudbox-versions --json     JSON (portail, versions.json de la release)
+#   cloudbox-versions --check    tableau + code de sortie 1 si un outil ne répond pas
+#
+# Chaque outil ajouté à l'image doit avoir une entrée ici.
+set -uo pipefail
+
+mode=table
+case "${1:-}" in
+    --json) mode=json ;;
+    --check) mode=check ;;
+    ""|--table) ;;
+    -h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Option inconnue : $1" >&2; exit 2 ;;
+esac
+
+PS_MODULES=/usr/local/share/powershell/Modules
+rows=()   # catégorie|nom|commande|version
+failed=0
+
+# Première version de forme x.y[.z…] trouvée dans un texte
+first_version() { grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)*' | head -n 1; }
+
+# add <catégorie> <nom> <commande affichée> <commande à exécuter…>
+add() {
+    local cat=$1 name=$2 shown=$3; shift 3
+    local v
+    v=$(timeout 60 "$@" 2>&1 | first_version)
+    [[ -n $v ]] || failed=1
+    rows+=("$cat|$name|$shown|${v:-}")
+}
+
+# add_optional : comme add, mais seulement si le binaire existe (outils de l'image :web)
+add_optional() {
+    command -v "$4" >/dev/null 2>&1 && add "$@"
+}
+
+# add_psmodule <nom du module> : version lue dans le dossier du module (sans charger pwsh)
+add_psmodule() {
+    local v
+    v=$(ls -1 "$PS_MODULES/$1" 2>/dev/null | sort -V | tail -n 1)
+    [[ -n $v ]] || failed=1
+    rows+=("Modules PowerShell|$1|Import-Module $1|${v:-}")
+}
+
+add Azure "Azure CLI" az az version --query '"azure-cli"' -o tsv
+add Azure "Azure Developer CLI" azd azd version
+add Azure "Bicep" bicep bicep --version
+add Azure "AzCopy" azcopy azcopy --version
+add Azure "sqlcmd (go-sqlcmd)" sqlcmd sqlcmd --version
+
+add PowerShell "PowerShell" pwsh pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+add_psmodule Az
+add_psmodule Microsoft.Graph
+add_psmodule ExchangeOnlineManagement
+add_psmodule MicrosoftTeams
+add_psmodule PnP.PowerShell
+
+add "Microsoft 365" "CLI for Microsoft 365" m365 m365 version
+add "Microsoft 365" "Node.js" node node --version
+
+add Kubernetes "kubectl" kubectl kubectl version --client
+add Kubernetes "Helm" helm helm version --short
+add Kubernetes "kubelogin" kubelogin kubelogin --version
+add Kubernetes "k9s" k9s k9s version --short
+add Kubernetes "kubectx" kubectx kubectx --version
+add Kubernetes "kubens" kubens kubens --version
+
+add IaC "OpenTofu" tofu tofu version
+add IaC "Terraform" terraform terraform version
+
+add "Outils" "GitHub CLI" gh gh --version
+add "Outils" "Bash" bash bash --version
+add "Outils" "curl" curl curl --version
+add "Outils" "git" git git --version
+add "Outils" "yq" yq yq --version
+add "Outils" "jq" jq jq --version
+add "Outils" "Python" python3 python3 --version
+add "Outils" "OpenSSL" openssl openssl version
+add "Outils" "tmux" tmux tmux -V
+
+add_optional "Interface web" "Caddy" caddy caddy version
+add_optional "Interface web" "ttyd" ttyd ttyd --version
+# Au premier lancement, code-server journalise sur stdout la création de son config.yaml avant sa version
+if command -v code-server >/dev/null 2>&1; then
+    add "Interface web" "code-server" code-server bash -c "code-server --version 2>/dev/null | grep -m 1 -E '^[0-9]+\\.'"
+fi
+# Extensions VS Code préinstallées (archives VSIX de l'image :web, installées au premier démarrage)
+for vsix in /opt/cloudbox/vsix/*.vsix; do
+    [[ -r $vsix ]] || continue
+    IFS='|' read -r ext_id ext_name ext_version < <(unzip -p "$vsix" extension/package.json 2>/dev/null \
+        | jq -r '[.publisher + "." + .name, .displayName // "", .version // ""] | join("|")' 2>/dev/null)
+    ext_id=${ext_id:-$(basename "$vsix" .vsix)}
+    # displayName localisé (« %displayName% ») : on garde l'identifiant
+    [[ -z $ext_name || $ext_name == %* ]] && ext_name=$ext_id
+    [[ -n $ext_version ]] || failed=1
+    rows+=("Extensions VS Code|$ext_name|$ext_id|$ext_version")
+done
+if [[ -r /etc/cloudbox/s6-overlay.version ]]; then
+    rows+=("Interface web|s6-overlay|/init|$(cat /etc/cloudbox/s6-overlay.version)")
+fi
+
+if [[ $mode == json ]]; then
+    printf '%s\n' "${rows[@]}" | jq -R -s \
+        --arg generated "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg arch "$(uname -m)" \
+        '{generated: $generated, arch: $arch,
+          tools: [split("\n")[] | select(length > 0) | split("|")
+                  | {category: .[0], name: .[1], command: .[2], version: .[3]}]}'
+else
+    printf '%-20s %-28s %s\n' "CATÉGORIE" "OUTIL" "VERSION"
+    for r in "${rows[@]}"; do
+        IFS='|' read -r cat name _ v <<<"$r"
+        printf '%-20s %-28s %s\n' "$cat" "$name" "${v:-ÉCHEC}"
+    done
+fi
+
+if [[ $mode == check && $failed -ne 0 ]]; then
+    echo "Au moins un outil ne répond pas." >&2
+    exit 1
+fi
+exit 0

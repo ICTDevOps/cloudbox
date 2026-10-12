@@ -1,0 +1,8 @@
+.git
+.github
+tests
+*.md
+config
+scripts
+image/web/portal/node_modules
+image/web/portal/dist

@@ -1,0 +1,10 @@
+#!/command/with-contenv bash
+# VS Code web : code-server sur un socket UNIX, derrière Caddy (/code/), sans authentification propre.
+unset CLOUDBOX_TOKEN
+socket=/run/cloudbox/code-server.sock
+rm -f "$socket"
+/usr/local/bin/cloudbox-code-extensions || echo "[code-server] Avertissement : extensions non installées" >&2
+cd /home/dev
+exec code-server --socket "$socket" --auth none \
+    --disable-telemetry --disable-update-check --disable-getting-started-override \
+    /home/dev

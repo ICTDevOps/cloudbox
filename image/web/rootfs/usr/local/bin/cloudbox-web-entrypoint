@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Point d'entrée de l'image :web.
+#   CLOUDBOX_MODE=web   (défaut) : s6-overlay démarre Caddy, ttyd et code-server.
+#   CLOUDBOX_MODE=shell          : aucun service web, le container attend (wslc, docker exec).
+set -euo pipefail
+
+case "${CLOUDBOX_MODE:-web}" in
+    web)
+        # Configuration root (sudo) avant /init : s6-overlay vide l'environnement du PID 1,
+        # alors qu'à ce stade le PID 1 est ce script, avec l'environnement du container.
+        sudo -n /usr/local/sbin/cloudbox-root-init \
+            || echo "[cloudbox] Avertissement : configuration root impossible" >&2
+        exec /init "$@"
+        ;;
+    shell)
+        [[ $# -gt 0 ]] || set -- sleep infinity
+        exec /usr/local/bin/cloudbox-entrypoint "$@"
+        ;;
+    *)
+        echo "CLOUDBOX_MODE inconnu : '$CLOUDBOX_MODE' (attendu : web ou shell)" >&2
+        exit 2
+        ;;
+esac

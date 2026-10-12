@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Point d'entrée de l'image :cli (et de l'image :web en CLOUDBOX_MODE=shell).
+# Initialise le home puis exécute la commande (par défaut : sleep infinity, usage wslc / docker exec).
+set -euo pipefail
+
+/usr/local/bin/cloudbox-init
+exec "$@"

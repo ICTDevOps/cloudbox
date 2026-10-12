@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Initialisation du container, exécutée à chaque démarrage en tant que dev.
+#  - configuration root unique (sudo selon CLOUDBOX_SUDO, propriétaire du home) ;
+#  - premier démarrage : copie du squelette /etc/skel dans le volume /home/dev.
+# Le fuseau horaire est porté par la variable TZ (paquet tzdata), sans action ici.
+# Les messages vont sur stderr : stdout reste celui de la commande lancée (docker run … <commande>).
+set -euo pipefail
+
+home=/home/dev
+marker=$home/.cloudbox/.initialized
+
+# Seule commande autorisée en root via sudoers ; elle ne fait rien après le premier passage.
+if ! sudo -n /usr/local/sbin/cloudbox-root-init; then
+    echo "[cloudbox-init] Avertissement : configuration root impossible (sudo indisponible ?)" >&2
+fi
+
+if [[ ! -w $home ]]; then
+    echo "[cloudbox-init] Erreur : $home n'est pas accessible en écriture pour $(id -un)" >&2
+    exit 1
+fi
+
+# Premier démarrage : un volume Docker nommé reçoit déjà le contenu de l'image, mais un bind mount
+# ou un volume wslc arrive vide. On complète sans écraser les fichiers existants.
+if [[ ! -e $marker ]]; then
+    echo "[cloudbox-init] Premier démarrage : initialisation de $home" >&2
+    cp -a --update=none /etc/skel/. "$home/"
+    install -d -m 0700 "$home/.cloudbox"
+    date -u +%Y-%m-%dT%H:%M:%SZ > "$marker"
+fi
+install -d -m 0700 "$home/.cloudbox"

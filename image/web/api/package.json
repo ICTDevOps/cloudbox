@@ -1,0 +1,6 @@
+{
+  "name": "cloudbox-api",
+  "private": true,
+  "type": "module",
+  "description": "API du portail Cloudbox, exécutée directement par Node (type stripping)"
+}

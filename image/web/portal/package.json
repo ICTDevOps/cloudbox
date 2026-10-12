@@ -1,0 +1,20 @@
+{
+  "name": "cloudbox-portal",
+  "private": true,
+  "type": "module",
+  "description": "Portail Cloudbox : accueil, workspaces (Dockview), connexion",
+  "scripts": {
+    "build": "tsc --noEmit -p . && tsc --noEmit -p ../api && vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "dockview": "8.4.1",
+    "dockview-core": "8.4.1",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}

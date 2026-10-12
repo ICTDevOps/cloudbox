@@ -1,0 +1,36 @@
+# Cloudbox — un container par utilisateur, sur son propre PC.
+#   docker compose up -d        puis http://localhost:8080
+#   docker compose logs         pour lire le jeton d'accès généré au premier démarrage
+#
+# Variables (fichier .env à côté de ce fichier, ignoré par git, ou environnement) :
+#   CLOUDBOX_IMAGE   image à utiliser (défaut : ghcr.io/ictdevops/cloudbox:web)
+#   CLOUDBOX_PORT    port local (défaut : 8080) ; toujours publié sur 127.0.0.1 uniquement
+#   CLOUDBOX_TOKEN   jeton d'accès imposé (sinon généré et conservé dans le volume)
+#   CLOUDBOX_SUDO    true pour autoriser sudo dans le container (défaut : false)
+#   CLOUDBOX_SHELL   pwsh ou bash : shell par défaut (cloudbox-shell, terminal de VS Code)
+#   CLOUDBOX_MODE    web (défaut) ou shell (aucun service web)
+#   TZ               fuseau horaire (défaut : Europe/Paris)
+name: cloudbox
+
+services:
+  cloudbox:
+    image: ${CLOUDBOX_IMAGE:-ghcr.io/ictdevops/cloudbox:web}
+    container_name: cloudbox
+    hostname: cloudbox
+    restart: unless-stopped
+    ports:
+      # Jamais 0.0.0.0 : le terminal web ne doit être joignable que depuis ce PC
+      - "127.0.0.1:${CLOUDBOX_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+      CLOUDBOX_TOKEN: ${CLOUDBOX_TOKEN:-}
+      CLOUDBOX_SUDO: ${CLOUDBOX_SUDO:-false}
+      CLOUDBOX_SHELL: ${CLOUDBOX_SHELL:-pwsh}
+      CLOUDBOX_MODE: ${CLOUDBOX_MODE:-web}
+    volumes:
+      - cloudbox-home:/home/dev
+    # Pas de socket Docker monté, pas de mode privilégié.
+
+volumes:
+  cloudbox-home:
+    name: cloudbox-home
