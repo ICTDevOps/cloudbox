@@ -10,6 +10,13 @@ and every Azure / Microsoft 365 administration tool, kept up to date.
 
 ![A production workspace: PowerShell and Bash terminals, VS Code](docs/screenshots/workspace.png)
 
+**Try it now**, nothing to build: see [Run the prebuilt image](#run-the-prebuilt-image-no-build-needed).
+
+```bash
+docker run -d --name cloudbox -p 127.0.0.1:8080:8080 -v cloudbox-home:/home/dev ghcr.io/ictdevops/cloudbox:web
+docker logs cloudbox   # access token, then open http://localhost:8080
+```
+
 ## Screenshots
 
 | | |
@@ -40,62 +47,133 @@ browser ──http://localhost:8080──▶ cloudbox container
 - Reachable **from the PC only** (`127.0.0.1`), protected by a token.
 - Classic terminal access still works: `docker exec -it cloudbox pwsh`.
 
-## Quick start
+## Run the prebuilt image (no build needed)
 
-**Requirements:** Docker Desktop (Windows 11 with WSL2, macOS) or Docker Engine / Podman (Linux),
-on amd64 or arm64. No GitHub account is needed: the image is public. The download is about 1.6 GB
-(every Azure and Microsoft 365 PowerShell module is included), so the first start takes a while.
+Cloudbox is published as a ready-to-use image on the GitHub Container Registry. Nothing has to be
+cloned or built: reference the image and start it.
 
-**1. Get the compose file** (no need to clone the repository):
+```
+ghcr.io/ictdevops/cloudbox:web
+```
+
+- **Public**: no GitHub account and no `docker login` needed.
+- **Multi-arch**: the same name works on amd64 (Intel / AMD PCs) and arm64 (Apple Silicon,
+  ARM servers); Docker picks the right variant.
+- **Size**: about 1.6 GB to download (every Azure and Microsoft 365 PowerShell module is
+  included), so the first start takes a while.
+- **Requirements**: Docker Desktop (Windows 11 with WSL2, macOS) or Docker Engine / Podman (Linux).
+
+| Tag | When to use it |
+|---|---|
+| `:web` / `:latest` | Recommended: full image, rebuilt every week |
+| `:edge` | Follows `main` commit by commit (latest tool updates, less tested) |
+| `:cli` | Tools only, no web interface (`docker exec`, wslc) |
+| `:vYYYY.MM.DD-web` | A fixed weekly build, to pin a version |
+
+> **Always publish the port on `127.0.0.1`**, as in the examples below. The web terminal holds
+> your Azure and Microsoft 365 sign-ins: it must only be reachable from your own PC, never from
+> the network. To use Cloudbox running on another machine, go through an SSH tunnel
+> (`ssh -L 8080:localhost:8080 <host>`) or a private network such as Tailscale, not `0.0.0.0`.
+
+### Option 1: `docker run`
 
 ```bash
-# Linux, macOS, Windows (Git Bash / WSL)
-mkdir cloudbox && cd cloudbox
+docker run -d --name cloudbox --hostname cloudbox --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 \
+  -v cloudbox-home:/home/dev \
+  -e TZ=Europe/Paris \
+  ghcr.io/ictdevops/cloudbox:web
+
+docker logs cloudbox        # the access token is printed in a framed block
+```
+
+Windows PowerShell (line continuation with a backtick):
+
+```powershell
+docker run -d --name cloudbox --hostname cloudbox --restart unless-stopped `
+  -p 127.0.0.1:8080:8080 `
+  -v cloudbox-home:/home/dev `
+  -e TZ=Europe/Paris `
+  ghcr.io/ictdevops/cloudbox:web
+
+docker logs cloudbox
+```
+
+Open **http://localhost:8080** and paste the token.
+
+| Action | Command |
+|---|---|
+| Update | `docker pull ghcr.io/ictdevops/cloudbox:web`, then `docker rm -f cloudbox` and the `docker run` command again |
+| Stop / start | `docker stop cloudbox` / `docker start cloudbox` |
+| Shell without the browser | `docker exec -it cloudbox pwsh` or `docker exec -it cloudbox bash` |
+| Remove (sign-ins and files are kept in the volume) | `docker rm -f cloudbox` |
+| Remove everything | `docker rm -f cloudbox && docker volume rm cloudbox-home` |
+
+### Option 2: Docker Compose
+
+Create a folder with a `compose.yaml` file containing:
+
+```yaml
+name: cloudbox
+
+services:
+  cloudbox:
+    image: ghcr.io/ictdevops/cloudbox:web
+    container_name: cloudbox
+    hostname: cloudbox
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"     # never 0.0.0.0
+    environment:
+      TZ: Europe/Paris
+      # CLOUDBOX_TOKEN: choose-a-token-of-16-characters-or-more   # otherwise generated
+      # CLOUDBOX_SHELL: bash                                       # default: pwsh
+      # CLOUDBOX_SUDO: "true"                                      # default: false
+    volumes:
+      - cloudbox-home:/home/dev
+
+volumes:
+  cloudbox-home:
+    name: cloudbox-home
+```
+
+Or download the one from this repository, which reads its settings from a `.env` file
+(see [Settings](#settings)):
+
+```bash
 curl -fsSLO https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/compose.yaml
 ```
 
 ```powershell
-# Windows PowerShell
-mkdir cloudbox; cd cloudbox
 Invoke-WebRequest https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/compose.yaml -OutFile compose.yaml
 ```
 
-**2. Start Cloudbox and read the access token:**
+Then, in that folder:
 
 ```bash
 docker compose up -d
-docker compose logs cloudbox        # the token is printed in a framed block
+docker compose logs cloudbox        # the access token is printed in a framed block
 ```
 
-**3. Open http://localhost:8080** and paste the token.
-
-The token is generated on first start, kept in the volume (`~/.cloudbox/token`) and stays the
-same across restarts. It can also be read with
-`docker compose exec cloudbox cat /home/dev/.cloudbox/token`.
-
-**Without compose**, a single command does the same:
-
-```bash
-docker run -d --name cloudbox --restart unless-stopped \
-  -p 127.0.0.1:8080:8080 -v cloudbox-home:/home/dev \
-  ghcr.io/ictdevops/cloudbox:web
-docker logs cloudbox
-```
-
-Always publish the port on `127.0.0.1` as above: the web terminal holds your Azure and
-Microsoft 365 sign-ins and must not be reachable from the network.
-
-**Update, stop, remove:**
+Open **http://localhost:8080** and paste the token.
 
 | Action | Command |
 |---|---|
-| Update to the latest weekly image | `docker compose pull && docker compose up -d` |
+| Update to the latest image | `docker compose pull && docker compose up -d` |
 | Stop / start | `docker compose stop` / `docker compose start` |
-| Remove the container (sign-ins and files are kept) | `docker compose down` |
+| Shell without the browser | `docker compose exec cloudbox pwsh` or `docker compose exec cloudbox bash` |
+| Remove (sign-ins and files are kept in the volume) | `docker compose down` |
 | Remove everything, volume included | `docker compose down -v` |
 
-Updating recreates the container: the volume (`/home/dev`) keeps sign-ins, keys, workspaces and
-files, but open tmux sessions are closed.
+### Good to know
+
+- The token is generated on first start, kept in the volume (`~/.cloudbox/token`) and stays the
+  same across restarts and updates. It can also be read with
+  `docker exec cloudbox cat /home/dev/.cloudbox/token`.
+- Updating recreates the container: the `cloudbox-home` volume keeps sign-ins, keys, workspaces
+  and files, but open tmux sessions are closed.
+- Port 8080 already taken: change only the left-hand side, for example `127.0.0.1:8081:8080`,
+  then open http://localhost:8081.
 
 ## Getting started from a clone
 
@@ -105,6 +183,8 @@ cd cloudbox
 docker compose up -d
 docker compose logs cloudbox
 ```
+
+### Settings
 
 Settings (`.env` file next to `compose.yaml`, ignored by git; template: `.env.example`):
 
