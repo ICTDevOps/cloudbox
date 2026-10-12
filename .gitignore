@@ -1,0 +1,13 @@
+# Configuration propre au poste
+config/cloudbox.local.psd1
+
+# Variables d'environnement locales (jeton d'accès, etc.)
+.env
+*.local.env
+
+# Systèmes et éditeurs
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

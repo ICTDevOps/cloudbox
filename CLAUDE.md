@@ -25,7 +25,13 @@ L'accès terminal classique (`docker exec`, profil Windows Terminal) reste possi
 - Postes cibles principaux : Windows 11 + Docker Desktop (WSL2). Linux et macOS doivent
   fonctionner aussi (image multi-arch amd64 + arm64).
 
-## Ce qu'on reprend de WSLC tel quel
+## Ce qu'on reprend de WSLC (les principes, pas le code)
+
+> **Licence.** Le dépôt WSLC n'a pas de licence : son code reste la propriété de son auteur.
+> On reprend ses **principes** (listés ci-dessous), mais **on ne copie aucun fichier** de WSLC
+> (Dockerfile, scripts PowerShell, workflow, `renovate.json`, scripts de build). Tout est écrit
+> pour Cloudbox. Cette règle sera levée si l'auteur ajoute une licence permissive ou donne son
+> accord ; ce fichier sera alors mis à jour.
 
 - Le Dockerfile des outils CLI : az, azd, Bicep, PowerShell 7 + modules Az, Microsoft.Graph,
   ExchangeOnlineManagement, MicrosoftTeams, PnP.PowerShell, CLI for Microsoft 365, Node.js LTS,
@@ -80,7 +86,7 @@ Seul Caddy écoute sur le réseau du container (port 8080). ttyd et code-server 
 
 ### Init
 
-Le `devbox-init` de WSLC devient un script `cont-init.d` de s6 (`cloudbox-init`) :
+Un script `cont-init.d` de s6 (`cloudbox-init`, équivalent du `devbox-init` de WSLC, réécrit) :
 initialisation du volume `/home/dev` depuis `/etc/skel` au premier démarrage, fuseau horaire,
 génération du jeton d'accès (voir Sécurité).
 
@@ -122,7 +128,7 @@ par tenant dans `/home/dev/.cloudbox/tenants/` (notamment le `ClientId` PnP).
 - `compose.yaml` à la racine : image `:web`, volume `cloudbox-home:/home/dev`,
   port `127.0.0.1:8080:8080`, `restart: unless-stopped`, variables `TZ`, `CLOUDBOX_TOKEN`,
   `CLOUDBOX_SUDO`.
-- Scripts PowerShell repris de WSLC et adaptés à `docker` (avec détection de `wslc` en option) :
+- Scripts PowerShell écrits pour Cloudbox, sur le modèle fonctionnel de WSLC, pour `docker` (avec détection de `wslc` en option) :
   `Install-Cloudbox.ps1`, `Update-Cloudbox.ps1`, `Enter-Cloudbox.ps1`, `Uninstall-Cloudbox.ps1`.
   - Install : crée le volume et le container, la tâche planifiée de mise à jour, le profil
     Windows Terminal (`docker exec -it cloudbox pwsh`), affiche l'URL et le jeton.
@@ -134,7 +140,7 @@ par tenant dans `/home/dev/.cloudbox/tenants/` (notamment le `ClientId` PnP).
 
 ```
 image/cli/Dockerfile
-image/cli/build/                       # lib.sh, install-psmodule.sh (repris de WSLC)
+image/cli/build/                       # scripts d'aide au build (installation des modules PowerShell…)
 image/cli/rootfs/usr/local/bin/        # cloudbox-versions
 image/web/Dockerfile
 image/web/rootfs/etc/s6-overlay/s6-rc.d/   # caddy, ttyd-pwsh, ttyd-bash, code-server, cloudbox-init
@@ -152,7 +158,7 @@ README.md
 
 ### Étape 1 — PoC local (à faire en premier)
 
-1. Reprendre l'image WSLC dans `image/cli/` (renommer devbox → cloudbox).
+1. Écrire l'image `image/cli/` couvrant les mêmes outils que WSLC (sans copier son Dockerfile).
 2. Créer `image/web/Dockerfile` : s6-overlay, ttyd, tmux, code-server, Caddy, tous épinglés
    avec commentaires Renovate.
 3. Services s6 + `cloudbox-init` + Caddyfile avec auth par jeton et vérification `Host`/`Origin`.
