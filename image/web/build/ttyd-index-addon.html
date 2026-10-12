@@ -43,3 +43,51 @@ document.addEventListener('contextmenu', function (event) {
   }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 })();
 </script>
+<script>
+// Cloudbox : copier-coller avec tmux (souris activée).
+//  - Copier : une sélection à la souris est faite par tmux, qui transmet le texte copié par la
+//    séquence OSC 52 (set-clipboard on) ; ttyd ne la gère pas, on l'envoie au presse-papiers du
+//    navigateur. La lecture du presse-papiers par un programme (OSC 52 « ? ») reste refusée.
+//  - Coller : Ctrl+V (et Ctrl+Maj+V) est laissé au navigateur, qui colle le presse-papiers
+//    (collage « bracketed » géré par xterm.js) au lieu d'envoyer ^V au shell.
+(function () {
+  function decode(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  function notice(text) {
+    var el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText = 'position:fixed;top:8px;right:12px;z-index:100;padding:3px 10px;border-radius:6px;' +
+      'background:rgba(0,0,0,.75);color:#fff;font:13px system-ui,sans-serif;pointer-events:none';
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 900);
+  }
+  function setup(term) {
+    term.parser.registerOscHandler(52, function (data) {
+      var payload = data.slice(data.indexOf(';') + 1);
+      if (!payload || payload === '?') return true;
+      try {
+        navigator.clipboard.writeText(decode(payload)).then(function () { notice('Copié'); },
+          function () { notice('Copie refusée par le navigateur'); });
+      } catch (e) {
+        notice('Copie impossible');
+      }
+      return true;
+    });
+    term.attachCustomKeyEventHandler(function (event) {
+      var paste = event.ctrlKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === 'v';
+      return !paste;
+    });
+  }
+  // window.term est créé par ttyd après le chargement de cette page (et à chaque reconnexion)
+  var timer = setInterval(function () {
+    if (window.term && window.term.parser) {
+      clearInterval(timer);
+      setup(window.term);
+    }
+  }, 50);
+})();
+</script>
