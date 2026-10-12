@@ -1,0 +1,56 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigestsToSemver"
+  ],
+  "timezone": "Europe/Paris",
+  "labels": ["dependencies"],
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Outils épinglés dans les Dockerfile : commentaire « # renovate: » au-dessus d'une ligne ARG <OUTIL>_VERSION",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?(?: versioning=(?<versioning>\\S+))?\\s+ARG [A-Z0-9_]+=(?<currentValue>\\S+)"
+      ]
+    }
+  ],
+  "customDatasources": {
+    "openvsx": {
+      "description": "Extensions VS Code publiées sur Open VSX (versions stables uniquement)",
+      "defaultRegistryUrlTemplate": "https://open-vsx.org/api/-/query?extensionId={{packageName}}&includeAllVersions=true&size=200",
+      "transformTemplates": [
+        "{\"releases\": $each(extensions[$not(preRelease = true)]{version: $min($map(timestamp, function($x) { $toMillis($x) }))}, function($t, $v) {{\"version\": $v, \"releaseTimestamp\": $fromMillis($t)}})}"
+      ]
+    }
+  },
+  "packageRules": [
+    {
+      "description": "Patch et minor : fusion automatique si le build et le test de fumée sont verts",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Versions majeures : revue manuelle",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major"]
+    },
+    {
+      "description": "Node.js : rester sur les versions LTS",
+      "matchDatasources": ["node-version"],
+      "matchPackageNames": ["node"],
+      "versioning": "node"
+    },
+    {
+      "description": "L'image :web part de l'image :cli construite dans le même workflow",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/ictdevops/cloudbox"],
+      "enabled": false
+    }
+  ]
+}
