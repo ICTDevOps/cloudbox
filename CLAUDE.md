@@ -60,16 +60,43 @@ Paquets Ubuntu à installer (suivis par l'`apt upgrade` du build hebdomadaire, p
 | Shell et confort | `bash`, `bash-completion`, `tmux`, `less`, `vim`, `nano`, `tree`, `fzf`, `ripgrep`, `bat`, `htop` |
 | Certificats et crypto | `openssl`, `ca-certificates`, `gnupg` |
 | Réseau | `curl`, `wget`, `dnsutils` (dig, nslookup), `iputils-ping`, `traceroute`, `mtr-tiny`, `netcat-openbsd`, `whois`, `iproute2`, `openssh-client` |
-| Données | `jq`, `yq`, `unzip`, `zip`, `rsync` |
+| Données | `jq`, `unzip`, `zip`, `rsync` (yq : voir « Outils complémentaires ») |
 | Dev | `git`, `git-lfs`, `python3`, `python3-pip`, `pipx`, `make` |
 | Système | `sudo`, `tzdata`, `locales` |
 
-À vérifier au moment de l'installation : le paquet Ubuntu `yq` peut être la variante Python
-(kislyuk) et non celle de mikefarah ; si c'est le cas, installer la version mikefarah depuis ses
-releases GitHub, épinglée avec Renovate. Sur Ubuntu, `bat` s'appelle `batcat` : ajouter un alias.
+Sur Ubuntu, `bat` s'appelle `batcat` : ajouter un alias.
 
 `openssl` sert notamment à inspecter et convertir les certificats (PEM / PFX / CER) pour les
 App Registrations, Key Vault et les connexions PowerShell par certificat.
+
+## Outils complémentaires (binaires épinglés, image `:cli`)
+
+Installés depuis les releases officielles (binaire ou archive, variante amd64 / arm64), **épinglés
+et suivis par Renovate** exactement comme az, kubectl ou helm : `ARG` + commentaire
+`# renovate:`, une PR par outil, fusion automatique des patch/minor si le build est vert.
+
+| Outil | Usage | Commentaire Renovate |
+|---|---|---|
+| OpenTofu (`tofu`) | IaC | `datasource=github-releases depName=opentofu/opentofu extractVersion=^v(?<version>.+)$` |
+| Terraform | IaC (projets qui l'imposent) | `datasource=github-releases depName=hashicorp/terraform extractVersion=^v(?<version>.+)$` |
+| kubelogin | Authentification Entra ID sur AKS | `datasource=github-releases depName=Azure/kubelogin extractVersion=^v(?<version>.+)$` |
+| k9s | Interface terminal Kubernetes | `datasource=github-releases depName=derailed/k9s extractVersion=^v(?<version>.+)$` |
+| kubectx / kubens | Changement de contexte et de namespace | `datasource=github-releases depName=ahmetb/kubectx extractVersion=^v(?<version>.+)$` |
+| azcopy | Transferts vers Azure Storage | `datasource=github-releases depName=Azure/azure-storage-azcopy extractVersion=^v(?<version>.+)$` |
+| sqlcmd (go-sqlcmd) | Azure SQL / SQL Server | `datasource=github-releases depName=microsoft/go-sqlcmd extractVersion=^v(?<version>.+)$` |
+| yq (mikefarah) | YAML en ligne de commande | `datasource=github-releases depName=mikefarah/yq extractVersion=^v(?<version>.+)$` |
+
+Règles :
+- **Vérifier le format exact des tags et des noms d'archives** de chaque projet avant d'écrire
+  l'URL et l'`extractVersion` (les conventions diffèrent : préfixe `v` ou non, nom de l'archive
+  par architecture). Les commentaires ci-dessus sont un point de départ, pas une vérité.
+- **Vérifier la somme de contrôle** (SHA-256) publiée avec la release quand le projet en fournit une.
+- Ajouter la complétion Bash quand l'outil la génère (`tofu`, `kubectl`, `k9s`, `yq`…).
+- Chaque outil est ajouté à `cloudbox-versions` et vérifié dans le test de fumée
+  (`<outil> --version` ou équivalent) : une mise à jour qui casse un binaire bloque la PR Renovate.
+- Terraform est sous licence BSL : acceptable pour un usage d'administration, à mentionner
+  dans le README.
+- `yq` vient d'ici (version mikefarah), pas du paquet Ubuntu.
 
 ## Architecture
 
