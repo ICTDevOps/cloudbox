@@ -57,8 +57,8 @@ ghcr.io/ictdevops/cloudbox:web
 ```
 
 - **Public**: no GitHub account and no `docker login` needed.
-- **Multi-arch**: the same name works on amd64 (Intel / AMD PCs) and arm64 (Apple Silicon,
-  ARM servers); Docker picks the right variant.
+- **Platform**: linux/amd64 (Intel / AMD PCs: Windows with Docker Desktop, Linux). Macs with
+  Apple Silicon can run it through Docker Desktop's x86-64 emulation, more slowly.
 - **Size**: about 1.6 GB to download (every Azure and Microsoft 365 PowerShell module is
   included), so the first start takes a while.
 - **Requirements**: Docker Desktop (Windows 11 with WSL2, macOS) or Docker Engine / Podman (Linux).
@@ -340,7 +340,7 @@ own infrastructure is allowed. OpenTofu (MPL 2.0) is installed alongside.
 | `:sha-<commit>-web`, `:sha-<commit>-cli` | Build of a given commit |
 
 Every tool is pinned (`ARG <TOOL>_VERSION` + `# renovate:` comment). Renovate opens one PR per
-tool after 3 days of availability; the workflow builds amd64 and arm64 and runs the smoke tests;
+tool after 3 days of availability; the workflow builds the amd64 image and runs the smoke tests;
 patch/minor updates are merged automatically when everything is green, major ones wait for a
 review. Automatic merging requires the protection of `main` to require the `build` workflow
 status.
