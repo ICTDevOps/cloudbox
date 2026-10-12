@@ -12,7 +12,7 @@ NAME=cloudbox-smoke-$$
 TOKEN=$(openssl rand -hex 32)
 BASE=http://127.0.0.1:8080
 
-cleanup() { docker rm -f "$NAME" "$NAME-gen" "$NAME-shell" >/dev/null 2>&1; }
+cleanup() { docker rm -f "$NAME" "$NAME-gen" "$NAME-sudo" "$NAME-shell" >/dev/null 2>&1; }
 trap cleanup EXIT
 
 # code HTTP d'une requête faite depuis le container
@@ -127,6 +127,14 @@ if wait_healthy "$NAME-gen"; then
     expect "GET / avec le jeton généré" 200 "$(docker exec "$NAME-gen" curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $gen" "$BASE/")"
 else
     fail "le container sans CLOUDBOX_TOKEN ne démarre pas"
+fi
+
+section "CLOUDBOX_SUDO=true"
+docker run -d --name "$NAME-sudo" -e CLOUDBOX_SUDO=true "$IMAGE" >/dev/null
+if wait_healthy "$NAME-sudo"; then
+    expect "sudo accepté" "root" "$(docker exec "$NAME-sudo" sudo -n whoami 2>&1 | tr -d '\r')"
+else
+    fail "le container avec CLOUDBOX_SUDO=true ne démarre pas"
 fi
 
 section "CLOUDBOX_MODE=shell"

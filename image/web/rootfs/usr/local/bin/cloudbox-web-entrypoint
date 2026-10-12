@@ -6,6 +6,10 @@ set -euo pipefail
 
 case "${CLOUDBOX_MODE:-web}" in
     web)
+        # Configuration root (sudo) avant /init : s6-overlay vide l'environnement du PID 1,
+        # alors qu'à ce stade le PID 1 est ce script, avec l'environnement du container.
+        sudo -n /usr/local/sbin/cloudbox-root-init \
+            || echo "[cloudbox] Avertissement : configuration root impossible" >&2
         exec /init "$@"
         ;;
     shell)
