@@ -1,0 +1,12 @@
+#!/command/with-contenv bash
+# Terminal web Bash : ttyd sur un socket UNIX, derrière Caddy (/term/bash/).
+# tmux new -A rattache la session existante : fermer l'onglet ne tue pas le shell.
+unset CLOUDBOX_TOKEN
+socket=/run/cloudbox/ttyd-bash.sock
+rm -f "$socket"
+cd /home/dev
+exec ttyd --interface "$socket" --base-path /term/bash --writable --check-origin \
+    --client-option titleFixed=Bash \
+    --client-option fontSize=14 \
+    --client-option disableLeaveAlert=true \
+    tmux new-session -A -s bash bash -l

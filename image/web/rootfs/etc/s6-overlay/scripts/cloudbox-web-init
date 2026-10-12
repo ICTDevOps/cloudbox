@@ -1,0 +1,61 @@
+#!/command/with-contenv bash
+# Initialisation de l'image :web (oneshot s6, avant les services).
+#  - initialisation commune (cloudbox-init) ;
+#  - jeton d'accès : CLOUDBOX_TOKEN, sinon ~/.cloudbox/token, sinon généré ;
+#  - réglages machine de code-server (shell du terminal intégré).
+set -euo pipefail
+
+/usr/local/bin/cloudbox-init
+
+home=/home/dev
+token_file=$home/.cloudbox/token
+install -d -m 0700 /run/cloudbox
+
+umask 077
+if [[ -n ${CLOUDBOX_TOKEN:-} ]]; then
+    if [[ ${#CLOUDBOX_TOKEN} -lt 16 || $CLOUDBOX_TOKEN =~ [[:space:]] ]]; then
+        echo "[cloudbox] CLOUDBOX_TOKEN refusé : 16 caractères minimum, sans espace." >&2
+        exit 1
+    fi
+    printf '%s' "$CLOUDBOX_TOKEN" > "$token_file"
+    source=env
+elif [[ -s $token_file ]]; then
+    source=file
+else
+    openssl rand -hex 32 | tr -d '\n' > "$token_file"
+    source=generated
+fi
+chmod 0600 "$token_file"
+
+echo "────────────────────────────────────────────────────────────────────"
+echo " Cloudbox est prêt : http://localhost:8080"
+if [[ $source == env ]]; then
+    echo " Jeton d'accès : celui de la variable CLOUDBOX_TOKEN"
+else
+    echo " Jeton d'accès : $(cat "$token_file")"
+    echo " (stocké dans $token_file ; à garder secret)"
+fi
+echo "────────────────────────────────────────────────────────────────────"
+
+# Réglages « machine » de code-server, réécrits à chaque démarrage.
+# Les réglages utilisateur (User/settings.json) restent prioritaires.
+umask 022
+case "${CLOUDBOX_SHELL:-pwsh}" in
+    bash) profile=bash ;;
+    *) profile=pwsh ;;
+esac
+machine=$home/.local/share/code-server/Machine
+install -d "$machine"
+cat > "$machine/settings.json" <<JSON
+{
+    "terminal.integrated.defaultProfile.linux": "$profile",
+    "terminal.integrated.profiles.linux": {
+        "pwsh": { "path": "/usr/bin/pwsh", "args": ["-NoLogo", "-Login"], "icon": "terminal-powershell" },
+        "bash": { "path": "/bin/bash", "args": ["-l"], "icon": "terminal-bash" }
+    },
+    "telemetry.telemetryLevel": "off",
+    "redhat.telemetry.enabled": false,
+    "update.mode": "none",
+    "workbench.startupEditor": "none"
+}
+JSON

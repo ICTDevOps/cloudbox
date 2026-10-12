@@ -1,0 +1,136 @@
+# Caddy — seule porte d'entrée de Cloudbox (port 8080).
+#
+# Variables fournies par le script de service (s6-rc.d/caddy/run) :
+#   CLOUDBOX_TOKEN    jeton d'accès (en-tête « Authorization: Bearer <jeton> » ou page de connexion)
+#   CLOUDBOX_SESSION  valeur du cookie de session, dérivée du jeton
+#
+# ttyd et code-server écoutent sur des sockets UNIX sans authentification : tout passe par ici.
+{
+	admin off
+	auto_https off
+	persist_config off
+	servers {
+		protocols h1 h2c
+	}
+	log {
+		output stdout
+		format console
+		level WARN
+	}
+}
+
+http://:8080 {
+	# --- En-têtes de sécurité (ajustés plus bas pour le terminal et VS Code) ---
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+		-Server
+	}
+
+	# --- Contrôles d'accès, dans l'ordre ---
+	# Hôte : localhost ou 127.0.0.1 seulement, quel que soit le port publié (DNS rebinding)
+	@bad_host not host localhost 127.0.0.1
+
+	# Origin : si présent, doit être exactement l'origine de la page (CSRF, WebSocket cross-site)
+	@bad_origin {
+		header Origin *
+		not expression `{http.request.header.Origin} == "http://" + {http.request.hostport}`
+	}
+
+	# WebSocket : Origin obligatoire
+	@ws_without_origin {
+		header_regexp Connection (?i)upgrade
+		header_regexp Upgrade (?i)websocket
+		not header Origin *
+	}
+
+	# Session : cookie de session ou en-tête Bearer (scripts, test de fumée)
+	@authenticated expression `{env.CLOUDBOX_SESSION} != "" && ({http.request.cookie.cloudbox_session} == {env.CLOUDBOX_SESSION} || {http.request.header.Authorization} == "Bearer " + {env.CLOUDBOX_TOKEN})`
+	@anonymous not expression `{env.CLOUDBOX_SESSION} != "" && ({http.request.cookie.cloudbox_session} == {env.CLOUDBOX_SESSION} || {http.request.header.Authorization} == "Bearer " + {env.CLOUDBOX_TOKEN})`
+
+	route {
+		respond @bad_host "Hôte non autorisé" 403 {
+			close
+		}
+		respond @bad_origin "Origine non autorisée" 403
+		respond @ws_without_origin "Origine requise" 403
+
+		# Sonde de santé (HEALTHCHECK de l'image), sans authentification
+		respond /_health "ok" 200
+
+		# Connexion : échange du jeton (en-tête Bearer) contre un cookie de session
+		@login {
+			method POST
+			path /_auth/login
+		}
+		handle @login {
+			header @authenticated Set-Cookie "cloudbox_session={env.CLOUDBOX_SESSION}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800"
+			header Cache-Control "no-store"
+			respond @authenticated 204
+			respond "Jeton invalide" 401
+		}
+
+		handle /_auth/logout {
+			header Set-Cookie "cloudbox_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+			redir * / 303
+		}
+
+		# Ressources de la page de connexion, publiques
+		handle /assets/* {
+			root * /srv/portal
+			file_server
+		}
+
+		# Tout le reste exige une session
+		error @anonymous 401
+
+		# Slash final manquant : redirection en conservant la query (?folder=… de code-server)
+		@no_slash path /term/pwsh /term/bash /code
+		redir @no_slash {path}/?{query} 308
+
+		# Terminal web : la page de ttyd embarque son JavaScript et ses styles
+		handle /term/pwsh/* {
+			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+			reverse_proxy unix//run/cloudbox/ttyd-pwsh.sock
+		}
+		handle /term/bash/* {
+			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+			reverse_proxy unix//run/cloudbox/ttyd-bash.sock
+		}
+
+		# VS Code web : code-server pose sa propre CSP ; ses webviews sont des iframes de même origine
+		handle_path /code/* {
+			header X-Frame-Options "SAMEORIGIN"
+			header Content-Security-Policy "frame-ancestors 'self'"
+			reverse_proxy unix//run/cloudbox/code-server.sock
+		}
+
+		# Portail
+		handle {
+			root * /srv/portal
+			header /versions.json Cache-Control "no-cache"
+			file_server
+		}
+	}
+
+	# Sans session : la page de connexion, avec le code 401
+	handle_errors 401 {
+		header {
+			X-Frame-Options "DENY"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+			Cache-Control "no-store"
+		}
+		root * /srv/portal
+		rewrite * /login.html
+		file_server
+	}
+
+	handle_errors {
+		respond "{err.status_code} {err.status_text}"
+	}
+}

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Point d'entrée de l'image :web.
+#   CLOUDBOX_MODE=web   (défaut) : s6-overlay démarre Caddy, ttyd et code-server.
+#   CLOUDBOX_MODE=shell          : aucun service web, le container attend (wslc, docker exec).
+set -euo pipefail
+
+case "${CLOUDBOX_MODE:-web}" in
+    web)
+        exec /init "$@"
+        ;;
+    shell)
+        [[ $# -gt 0 ]] || set -- sleep infinity
+        exec /usr/local/bin/cloudbox-entrypoint "$@"
+        ;;
+    *)
+        echo "CLOUDBOX_MODE inconnu : '$CLOUDBOX_MODE' (attendu : web ou shell)" >&2
+        exit 2
+        ;;
+esac

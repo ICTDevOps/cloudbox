@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+# Caddy : seul service à l'écoute sur le réseau du container (port 8080).
+set -euo pipefail
+
+token=$(cat /home/dev/.cloudbox/token 2>/dev/null || true)
+if [[ -z $token ]]; then
+    echo "[caddy] Jeton d'accès vide : refus de démarrer." >&2
+    exit 1
+fi
+export CLOUDBOX_TOKEN=$token
+# Valeur du cookie de session : dérivée du jeton, le jeton lui-même ne circule qu'à la connexion
+CLOUDBOX_SESSION=$(printf 'cloudbox-session:%s' "$token" | sha256sum | cut -d' ' -f1)
+export CLOUDBOX_SESSION
+export XDG_CONFIG_HOME=/run/cloudbox/caddy/config XDG_DATA_HOME=/run/cloudbox/caddy/data
+
+exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
