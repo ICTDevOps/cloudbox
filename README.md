@@ -51,6 +51,10 @@ Terminal sans navigateur : `docker exec -it cloudbox pwsh`, `docker exec -it clo
 `docker exec -it cloudbox cloudbox-shell` (shell choisi par `CLOUDBOX_SHELL`). Les sessions tmux
 du terminal web s'y rattachent avec `tmux attach -t pwsh` ou `tmux attach -t bash`.
 
+Dans le terminal web, la souris pilote tmux : clic droit pour le menu des panneaux (scinder,
+fermer…), molette pour l'historique. Maj + sélection copie du texte, Maj + clic droit ouvre le
+menu du navigateur.
+
 ### Construire les images localement
 
 ```bash

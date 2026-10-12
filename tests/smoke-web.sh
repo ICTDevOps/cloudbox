@@ -56,6 +56,7 @@ expect "GET /" 200 "$(http "${AUTH[@]}" "$BASE/")"
 expect "GET /versions.json" 200 "$(http "${AUTH[@]}" "$BASE/versions.json")"
 expect "GET /term/pwsh/" 200 "$(http "${AUTH[@]}" "$BASE/term/pwsh/")"
 expect "GET /term/bash/" 200 "$(http "${AUTH[@]}" "$BASE/term/bash/")"
+expect "page ttyd personnalisée (menu contextuel)" 1 "$(docker exec "$NAME" curl -s --compressed "${AUTH[@]}" "$BASE/term/pwsh/" | grep -c "Cloudbox : le clic droit va à tmux")"
 # code-server démarre après l'installation des extensions (premier démarrage) : 502 en attendant
 for _ in $(seq 1 45); do
     code=$(http -L --max-redirs 5 "${AUTH[@]}" "$BASE/code/")

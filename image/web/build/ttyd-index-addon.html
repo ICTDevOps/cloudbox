@@ -1,0 +1,7 @@
+<script>
+// Cloudbox : le clic droit va à tmux (menu des panneaux) sans ouvrir aussi le menu du navigateur.
+// Maj + clic droit garde le menu du navigateur (coller, inspecter…).
+document.addEventListener('contextmenu', function (event) {
+  if (!event.shiftKey) event.preventDefault();
+}, true);
+</script>

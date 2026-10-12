@@ -6,6 +6,7 @@ socket=/run/cloudbox/ttyd-bash.sock
 rm -f "$socket"
 cd /home/dev
 exec ttyd --interface "$socket" --base-path /term/bash --writable --check-origin \
+    --index /usr/share/cloudbox/ttyd/index.html \
     --client-option titleFixed=Bash \
     --client-option fontSize=14 \
     --client-option disableLeaveAlert=true \

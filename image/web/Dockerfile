@@ -39,6 +39,11 @@ RUN --mount=type=bind,source=image/cli/build,target=/build \
  && install -m 0755 "$f" /usr/local/bin/ttyd \
  && rm -f "$f"
 
+# Page d'accueil de ttyd : celle du binaire + blocage du menu contextuel du navigateur
+COPY image/web/build/ttyd-index.sh image/web/build/ttyd-index-addon.html /tmp/ttyd-index/
+RUN bash /tmp/ttyd-index/ttyd-index.sh /usr/share/cloudbox/ttyd/index.html \
+ && rm -rf /tmp/ttyd-index
+
 # --- Caddy (reverse proxy, authentification, portail) ---
 # renovate: datasource=github-releases depName=caddyserver/caddy extractVersion=^v(?<version>.+)$
 ARG CADDY_VERSION=2.11.7
