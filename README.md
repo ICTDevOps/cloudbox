@@ -53,7 +53,7 @@ Terminal sans navigateur : `docker exec -it cloudbox pwsh`, `docker exec -it clo
 du terminal web s'y rattachent avec `tmux attach -t pwsh` ou `tmux attach -t bash`.
 
 Dans le terminal web, la souris pilote tmux : clic droit pour le menu des panneaux (scinder,
-fermer…), molette pour l'historique. **Copier** : sélectionner à la souris (ou double-cliquer sur
+fermer…, le menu reste ouvert jusqu'au clic), molette pour l'historique. **Copier** : sélectionner à la souris (ou double-cliquer sur
 un mot) ; le texte part dans le presse-papiers du poste (« Copié » s'affiche). **Coller** :
 Ctrl+V, ou Maj + clic droit pour le menu du navigateur. Ctrl+V n'est donc plus transmis au
 terminal (dans vim, le mode bloc reste accessible par Ctrl+Q). Après un redémarrage ou une mise à jour du container, les terminaux ouverts

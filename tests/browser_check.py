@@ -266,6 +266,22 @@ with sync_playwright() as p:
     check("Ctrl+V colle le presse-papiers", bool(lines) and lines[0].rstrip().endswith("echo colle-ok"), lines)
     page.keyboard.press("Control+U")
 
+    # --- Clic droit : le menu de tmux reste ouvert quand la souris bouge ---
+    screen = term.locator(".xterm-screen").bounding_box()
+    mx, my = screen["x"] + screen["width"] / 3, screen["y"] + screen["height"] / 3
+    page.mouse.move(mx, my)
+    page.mouse.click(mx, my, button="right")
+    page.wait_for_timeout(500)
+    check("clic droit : menu tmux", "Horizontal Split" in (terminal_text(page, bash_frame) or ""))
+    for i in range(1, 8):
+        page.mouse.move(mx + 4 * i, my + 6 * i)
+        page.wait_for_timeout(50)
+    page.wait_for_timeout(300)
+    check("menu tmux toujours ouvert après un mouvement", "Horizontal Split" in (terminal_text(page, bash_frame) or ""))
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    check("Échap ferme le menu tmux", "Horizontal Split" not in (terminal_text(page, bash_frame) or ""))
+
     # --- Navigation entre workspaces par la barre latérale, sans rechargement ---
     pwsh_frame = f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']"
     origin_before = page.locator(pwsh_frame).evaluate("f => f.contentWindow.performance.timeOrigin")
