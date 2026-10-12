@@ -100,15 +100,22 @@ http://:8080 {
 		@no_slash path /term/pwsh /term/bash /code
 		redir @no_slash {path}/?{query} 308
 
-		# Terminal web : la page de ttyd embarque son JavaScript et ses styles
+		# API du portail (workspaces, sessions, contexte) : écritures en JSON uniquement (vérifié par l'API)
+		handle /api/* {
+			header Cache-Control "no-store"
+			reverse_proxy unix//run/cloudbox/api.sock
+		}
+
+		# Terminal web : la page de ttyd embarque son JavaScript et ses styles.
+		# SAMEORIGIN : affiché en iframe dans les workspaces du portail, jamais par un autre site.
 		handle /term/pwsh/* {
-			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
-			header X-Frame-Options "DENY"
+			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'"
+			header X-Frame-Options "SAMEORIGIN"
 			reverse_proxy unix//run/cloudbox/ttyd-pwsh.sock
 		}
 		handle /term/bash/* {
-			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
-			header X-Frame-Options "DENY"
+			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'"
+			header X-Frame-Options "SAMEORIGIN"
 			reverse_proxy unix//run/cloudbox/ttyd-bash.sock
 		}
 

@@ -1,0 +1,7 @@
+#!/command/with-contenv bash
+# cloudbox-api : API du portail (workspaces, sessions tmux, contexte réel), socket UNIX derrière Caddy.
+# Node exécute directement le TypeScript (type stripping), sans dépendance externe.
+unset CLOUDBOX_TOKEN
+cd /home/dev
+export CLOUDBOX_API_SOCKET=/run/cloudbox/api.sock
+exec node /usr/lib/cloudbox-api/server.ts

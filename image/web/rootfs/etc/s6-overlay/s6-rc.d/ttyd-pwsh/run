@@ -1,13 +1,15 @@
 #!/command/with-contenv bash
 # Terminal web PowerShell : ttyd sur un socket UNIX, derrière Caddy (/term/pwsh/).
-# tmux new -A rattache la session existante : fermer l'onglet ne tue pas le shell.
+# cloudbox-term lance ou rattache la session tmux (fermer l'onglet ne tue pas le shell) ;
+# --url-arg transmet ?arg=<workspace>~<n> pour les panneaux des workspaces (validé par cloudbox-term).
 unset CLOUDBOX_TOKEN
 socket=/run/cloudbox/ttyd-pwsh.sock
 rm -f "$socket"
 cd /home/dev
-exec ttyd --interface "$socket" --base-path /term/pwsh --writable --check-origin \
+exec ttyd --interface "$socket" --base-path /term/pwsh --writable --check-origin --url-arg \
+    --debug 3 \
     --index /usr/share/cloudbox/ttyd/index.html \
     --client-option titleFixed=PowerShell \
     --client-option fontSize=14 \
     --client-option disableLeaveAlert=true \
-    tmux new-session -A -s pwsh pwsh -NoLogo -Login
+    /usr/local/bin/cloudbox-term pwsh

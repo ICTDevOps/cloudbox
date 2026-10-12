@@ -27,15 +27,16 @@ else
 fi
 chmod 0600 "$token_file"
 
-echo "────────────────────────────────────────────────────────────────────"
-echo " Cloudbox est prêt : http://localhost:8080"
+# Bannière écrite en une seule fois : sur un pipe, une écriture courte est atomique et ne se
+# mélange pas aux journaux des services qui démarrent en parallèle
+line='────────────────────────────────────────────────────────────────────'
 if [[ $source == env ]]; then
-    echo " Jeton d'accès : celui de la variable CLOUDBOX_TOKEN"
+    token_text=" Jeton d'accès : celui de la variable CLOUDBOX_TOKEN"
 else
-    echo " Jeton d'accès : $(cat "$token_file")"
-    echo " (stocké dans $token_file ; à garder secret)"
+    token_text=" Jeton d'accès : $(cat "$token_file")
+ (stocké dans $token_file ; à garder secret)"
 fi
-echo "────────────────────────────────────────────────────────────────────"
+printf '%s\n Cloudbox est prêt : http://localhost:8080\n%s\n%s\n' "$line" "$token_text" "$line"
 
 # Réglages « machine » de code-server, réécrits à chaque démarrage.
 # Les réglages utilisateur (User/settings.json) restent prioritaires.
@@ -57,6 +58,7 @@ cat > "$machine/settings.json" <<JSON
     "redhat.telemetry.enabled": false,
     "update.mode": "none",
     "workbench.startupEditor": "none",
-    "chat.disableAIFeatures": true
+    "chat.disableAIFeatures": true,
+    "workbench.secondarySideBar.defaultVisibility": "hidden"
 }
 JSON

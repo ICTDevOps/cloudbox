@@ -7,6 +7,19 @@
 #   docker build -f image/web/Dockerfile --build-arg BASE_IMAGE=cloudbox:cli -t cloudbox:web .
 
 ARG BASE_IMAGE=ghcr.io/ictdevops/cloudbox:cli
+
+# --- Étape de build du portail (TypeScript + Vite + Preact + Dockview) ---
+# Réutilise Node de l'image :cli ; seul le résultat (dist/) passe dans l'image finale.
+FROM ${BASE_IMAGE} AS portal
+USER root
+WORKDIR /src/portal
+COPY image/web/portal/package.json image/web/portal/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY image/web/portal/ ./
+COPY image/web/api/ /src/api/
+# Contrôle de types du portail et de l'API, puis build
+RUN npm run build
+
 FROM ${BASE_IMAGE}
 
 ARG TARGETARCH
@@ -94,7 +107,8 @@ RUN --mount=type=bind,source=image/cli/build,target=/build \
 # --- Fichiers Cloudbox web (services s6, Caddyfile, portail) ---
 COPY --chmod=0755 image/web/rootfs/usr/local/bin/ /usr/local/bin/
 COPY image/web/rootfs/etc/ /etc/
-COPY image/web/rootfs/srv/ /srv/
+COPY --from=portal /src/portal/dist/ /srv/portal/
+COPY image/web/api/server.ts image/web/api/package.json /usr/lib/cloudbox-api/
 RUN chmod 0755 /etc/s6-overlay/scripts/* /etc/s6-overlay/s6-rc.d/*/run \
  && caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
  # s6-overlay tourne en dev (USER) : /run doit lui appartenir
