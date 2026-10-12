@@ -23,7 +23,7 @@
       "description": "Extensions VS Code publiées sur Open VSX (versions stables uniquement)",
       "defaultRegistryUrlTemplate": "https://open-vsx.org/api/-/query?extensionId={{packageName}}&includeAllVersions=true&size=200",
       "transformTemplates": [
-        "{\"releases\": $each(extensions[$not(preRelease = true)]{version: $min($map(timestamp, function($x) { $toMillis($x) }))}, function($t, $v) {{\"version\": $v, \"releaseTimestamp\": $fromMillis($t)}})}"
+        "{\"releases\": $each(extensions[$not(preRelease = true)]{version: $min($map(timestamp, function($x) { $toMillis($x) }))}, function($t, $v) { {\"version\": $v, \"releaseTimestamp\": $fromMillis($t)} })}"
       ]
     }
   },
