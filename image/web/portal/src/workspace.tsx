@@ -8,6 +8,7 @@ import { ConnectionsDrawer } from './connections';
 import { ContextBar } from './context';
 import { CONNECTIONS_EVENT, isConnectionsShortcut, mountDock, type DockHandle } from './dock';
 import { EnvBadge, TopBar } from './home';
+import { t } from './i18n';
 import { WorkspaceSettingsForm } from './settings';
 import { workspaceStore } from './store';
 
@@ -102,18 +103,19 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   }, [ws, active]);
 
   const viewClass = `ws-view${active ? ' active' : ''}`;
+  const m = t();
 
   if (error && !ws) {
     return (
       <div class={`${viewClass} page`}>
         <main class="home">
           <p class="error">{error}</p>
-          <a class="button" href="#/">Retour à l'accueil</a>
+          <a class="button" href="#/">{m.workspace.back}</a>
         </main>
       </div>
     );
   }
-  if (!ws) return <div class={`${viewClass} page`}><main class="home"><p class="muted">Chargement…</p></main></div>;
+  if (!ws) return <div class={`${viewClass} page`}><main class="home"><p class="muted">{m.common.loading}</p></main></div>;
 
   return (
     <div class={`${viewClass} page workspace env-frame-${ws.env}`} aria-hidden={!active}>
@@ -131,17 +133,17 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
         <button type="button" class="button" onClick={() => dock?.addPanel('pwsh')}>+ PowerShell</button>
         <button type="button" class="button" onClick={() => dock?.addPanel('bash')}>+ Bash</button>
         <button type="button" class="button" onClick={() => dock?.addPanel('code')}
-          title={dock?.hasCode() ? 'VS Code est déjà ouvert dans ce workspace' : ''}>
+          title={dock?.hasCode() ? m.workspace.codeOpen : ''}>
           {dock?.hasCode() ? 'VS Code' : '+ VS Code'}
         </button>
         {error && <span class="error">{error}</span>}
-        <span class="muted toolbar-hint">Disposition enregistrée automatiquement</span>
-        <button type="button" class="button ghost" onClick={openSettings} title="Nom, environnement, tenant, identifiants">
-          ⚙ Paramètres
+        <span class="muted toolbar-hint">{m.workspace.autosave}</span>
+        <button type="button" class="button ghost" onClick={openSettings} title={m.workspace.settingsTitle}>
+          ⚙ {m.common.settings}
         </button>
         <button type="button" class={`button${drawer ? ' primary' : ''} conn-toggle`} onClick={() => toggleDrawer()}
-          aria-expanded={drawer} title="Commandes de connexion (Ctrl+Maj+K)">
-          Connexions
+          aria-expanded={drawer} title={m.workspace.connectionsTitle}>
+          {m.common.connections}
         </button>
       </div>
       <div class="ws-body">
@@ -150,8 +152,8 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
           <ConnectionsDrawer ws={ws} dock={dock} onClose={() => toggleDrawer(false)} onEditSettings={openSettings} />
         )}
       </div>
-      <dialog class="create-dialog settings-dialog" ref={settingsDialog} aria-label="Paramètres du workspace">
-        <button type="button" class="dialog-close" aria-label="Fermer" onClick={() => settingsDialog.current?.close()}>×</button>
+      <dialog class="create-dialog settings-dialog" ref={settingsDialog} aria-label={m.workspace.settingsDialog}>
+        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => settingsDialog.current?.close()}>×</button>
         {settingsKey > 0 && (
           <WorkspaceSettingsForm key={settingsKey} ws={ws} onCancel={() => settingsDialog.current?.close()}
             onSaved={(saved) => {

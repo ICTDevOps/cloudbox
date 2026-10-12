@@ -1,4 +1,6 @@
 // Accès à cloudbox-api. Les écritures sont en JSON : condition imposée par l'API (protection CSRF).
+// Accept-Language : l'API répond dans la langue de l'interface.
+import { getLang, t } from './i18n';
 
 export type Env = 'dev' | 'acc' | 'prd';
 export const ENVS: readonly Env[] = ['dev', 'acc', 'prd'];
@@ -58,19 +60,20 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method, credentials: 'same-origin', cache: 'no-store' };
+  const headers: Record<string, string> = { 'Accept-Language': getLang() };
+  const init: RequestInit = { method, credentials: 'same-origin', cache: 'no-store', headers };
   if (method !== 'GET') {
-    init.headers = { 'Content-Type': 'application/json' };
+    headers['Content-Type'] = 'application/json';
     if (body !== undefined) init.body = JSON.stringify(body);
   }
   const response = await fetch(path, init);
   if (response.status === 401) {
     // Session expirée : la page de connexion s'affiche au rechargement
     window.location.reload();
-    throw new ApiError(401, 'Session expirée');
+    throw new ApiError(401, t().common.sessionExpired);
   }
   if (!response.ok) {
-    let message = `Erreur ${response.status}`;
+    let message = t().common.error(response.status);
     try {
       message = ((await response.json()) as { error?: string }).error ?? message;
     } catch {
@@ -108,7 +111,7 @@ export const api = {
     request<void>('POST', `/api/workspaces/${id}/sessions/${session}/input`, { text }),
   versions: async (): Promise<{ generated: string; arch: string; tools: ToolVersion[] }> => {
     const response = await fetch('/versions.json', { cache: 'no-cache', credentials: 'same-origin' });
-    if (!response.ok) throw new ApiError(response.status, 'Versions indisponibles');
+    if (!response.ok) throw new ApiError(response.status, t().home.versionsUnavailable);
     return response.json();
   },
 };

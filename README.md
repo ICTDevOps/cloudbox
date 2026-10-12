@@ -71,6 +71,14 @@ tests/smoke-browser.sh cloudbox:web     # Chromium headless (Playwright), captur
 CLOUDBOX_IMAGE=cloudbox:web docker compose up -d
 ```
 
+## Langue
+
+L'interface est en français ou en anglais : boutons **FR / EN** en bas de la barre latérale et
+sur la page de connexion. Le choix est mémorisé dans le navigateur ; à défaut, la langue du
+navigateur s'applique. Les messages d'erreur de l'API suivent la langue choisie. Restent en
+anglais quelle que soit la langue : VS Code (code-server), le menu de tmux et les outils
+eux-mêmes.
+
 ## Accueil
 
 L'accueil présente les trois outils de chaque workspace (PowerShell, Bash, VS Code), les gestes

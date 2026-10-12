@@ -135,6 +135,8 @@ expect "POST sans Content-Type JSON (CSRF)" 415 "$(api -X POST -H 'Content-Type:
 expect "POST identifiant invalide" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"../x","name":"x","env":"dev"}' "$BASE/api/workspaces")"
 expect "POST dossier hors /home/dev" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"dev","folder":"/etc"}' "$BASE/api/workspaces")"
 expect "POST dossier ../../etc" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"dev","folder":"../../etc"}' "$BASE/api/workspaces")"
+expect "message d'erreur en anglais (Accept-Language)" "Invalid environment (dev, acc or prd)" \
+    "$(docker exec "$NAME" curl -s -X POST "${AUTH[@]}" "${JSON[@]}" -H 'Accept-Language: en' -d '{"id":"evil","name":"x","env":"prod"}' "$BASE/api/workspaces" | docker exec -i "$NAME" jq -r .error)"
 expect "POST environnement invalide" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"prod"}' "$BASE/api/workspaces")"
 expect "POST workspace client" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev"}' "$BASE/api/workspaces")"
 expect "POST workspace client-prd" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client-prd","name":"Client PRD","env":"prd"}' "$BASE/api/workspaces")"

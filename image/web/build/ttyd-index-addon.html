@@ -57,6 +57,10 @@ document.addEventListener('contextmenu', function (event) {
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return new TextDecoder().decode(bytes);
   }
+  // Langue de l'interface du portail (même origine : même localStorage)
+  function en() {
+    try { return localStorage.getItem('cloudbox.lang') === 'en'; } catch (e) { return false; }
+  }
   function notice(text) {
     var el = document.createElement('div');
     el.textContent = text;
@@ -70,10 +74,10 @@ document.addEventListener('contextmenu', function (event) {
       var payload = data.slice(data.indexOf(';') + 1);
       if (!payload || payload === '?') return true;
       try {
-        navigator.clipboard.writeText(decode(payload)).then(function () { notice('Copié'); },
-          function () { notice('Copie refusée par le navigateur'); });
+        navigator.clipboard.writeText(decode(payload)).then(function () { notice(en() ? 'Copied' : 'Copié'); },
+          function () { notice(en() ? 'Copy blocked by the browser' : 'Copie refusée par le navigateur'); });
       } catch (e) {
-        notice('Copie impossible');
+        notice(en() ? 'Copy failed' : 'Copie impossible');
       }
       return true;
     });

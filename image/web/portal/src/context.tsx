@@ -3,6 +3,7 @@
 // partagée par tous les composants abonnés (barres, panneau Connexions), tant qu'il y en a un.
 import { useEffect, useState } from 'preact/hooks';
 import { api, type AzureContext, type CloudContext } from './api';
+import { t } from './i18n';
 
 const REFRESH_MS = 15_000;
 
@@ -40,15 +41,18 @@ export function useCloudContext(): ContextState {
 }
 
 function AzureChip({ label, ctx, hint }: { label: string; ctx: AzureContext | null; hint: string }) {
+  const m = t().context;
   if (!ctx) {
     return (
       <span class="chip chip-off" title={hint}>
-        <span class="chip-label">{label}</span> non connecté
+        <span class="chip-label">{label}</span> {m.notConnected}
       </span>
     );
   }
-  const title = [`Abonnement : ${ctx.subscription} (${ctx.subscriptionId})`, `Tenant : ${ctx.tenantId}`,
-    `Compte : ${ctx.user}`, ctx.cloud && `Cloud : ${ctx.cloud}`, hint].filter(Boolean).join('\n');
+  // Séparateur : espace avant les deux-points en français
+  const sep = document.documentElement.lang === 'fr' ? ' : ' : ': ';
+  const title = [`${m.subscription}${sep}${ctx.subscription} (${ctx.subscriptionId})`, `${m.tenant}${sep}${ctx.tenantId}`,
+    `${m.account}${sep}${ctx.user}`, ctx.cloud && `${m.cloud}${sep}${ctx.cloud}`, hint].filter(Boolean).join('\n');
   return (
     <span class="chip" title={title}>
       <span class="chip-label">{label}</span> {ctx.subscription}
@@ -59,24 +63,25 @@ function AzureChip({ label, ctx, hint }: { label: string; ctx: AzureContext | nu
 
 export function ContextBar({ showShared = false }: { showShared?: boolean }) {
   const ctx = useCloudContext();
-  if (ctx === null) return <div class="context-bar muted">Contexte…</div>;
-  if (ctx === 'error') return <div class="context-bar muted">Contexte indisponible</div>;
+  const m = t().context;
+  if (ctx === null) return <div class="context-bar muted">{m.loading}</div>;
+  if (ctx === 'error') return <div class="context-bar muted">{m.unavailable}</div>;
+  const sep = document.documentElement.lang === 'fr' ? ' : ' : ': ';
   return (
-    <div class="context-bar" aria-label="Contexte cloud réel">
-      <AzureChip label="az" ctx={ctx.azureCli} hint="Azure CLI : abonnement par défaut (az account show)" />
-      <AzureChip label="Az PS" ctx={ctx.azPowerShell}
-        hint="Az PowerShell : contexte enregistré (Get-AzContext), distinct de celui d'Azure CLI" />
+    <div class="context-bar" aria-label={m.label}>
+      <AzureChip label="az" ctx={ctx.azureCli} hint={m.hintAz} />
+      <AzureChip label="Az PS" ctx={ctx.azPowerShell} hint={m.hintAzPs} />
       {ctx.kubernetes ? (
-        <span class="chip" title={`Contexte kubectl : ${ctx.kubernetes.context}\nNamespace : ${ctx.kubernetes.namespace}`}>
+        <span class="chip" title={`${m.kubeContext}${sep}${ctx.kubernetes.context}\n${m.namespace}${sep}${ctx.kubernetes.namespace}`}>
           <span class="chip-label">⎈</span> {ctx.kubernetes.context}
           <span class="chip-muted"> · {ctx.kubernetes.namespace}</span>
         </span>
       ) : (
-        <span class="chip chip-off"><span class="chip-label">⎈</span> aucun contexte</span>
+        <span class="chip chip-off"><span class="chip-label">⎈</span> {m.noContext}</span>
       )}
       {showShared && ctx.sharedAcrossWorkspaces && (
-        <span class="chip chip-warn" title="Les connexions az, Az PowerShell et kubectl ne sont pas encore isolées par workspace : tous les workspaces utilisent ce même contexte.">
-          partagé entre workspaces
+        <span class="chip chip-warn" title={m.sharedTitle}>
+          {m.shared}
         </span>
       )}
     </div>

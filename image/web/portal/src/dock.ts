@@ -23,6 +23,7 @@ import {
 } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import { api, type Workspace } from './api';
+import { t } from './i18n';
 
 export type PanelKind = 'pwsh' | 'bash' | 'code';
 
@@ -113,7 +114,7 @@ class ClosableTab implements ITabRenderer {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'cb-tab-close';
-    close.title = p.kind === 'code' ? 'Fermer VS Code' : 'Fermer ce terminal et arrêter sa session';
+    close.title = p.kind === 'code' ? t().dock.closeCode : t().dock.closeTerminal;
     close.setAttribute('aria-label', close.title);
     close.textContent = '×';
     // Ne pas déclencher le glisser-déposer de l'onglet
@@ -176,7 +177,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
     const panel = parameters.api;
     if (p.kind !== 'code') {
       const session = `${ws.id}_${p.kind}_${p.n}`;
-      const ok = window.confirm(`Fermer « ${panelTitle(p)} » ?\n\nLa session ${session} sera arrêtée.`);
+      const ok = window.confirm(t().dock.confirmClose(panelTitle(p), session));
       if (!ok) return;
       try {
         await api.closeSession(ws.id, session);

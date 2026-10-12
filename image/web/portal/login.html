@@ -9,16 +9,20 @@
 </head>
 <body class="login">
   <main class="login-card">
+    <div class="lang-switch" id="login-lang" role="group" aria-label="Langue / Language">
+      <button type="button" data-lang="fr" lang="fr">FR</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+    </div>
     <h1><img src="/assets/favicon.svg" alt="" width="32" height="32"> Cloudbox</h1>
-    <p>Saisissez le jeton d'accès affiché par le script d'installation ou par
+    <p><span id="login-intro">Saisissez le jeton d'accès affiché par le script d'installation ou par</span>
       <code>docker logs cloudbox</code>.</p>
     <form id="login-form" autocomplete="off">
-      <label for="token">Jeton d'accès</label>
+      <label for="token" id="login-label">Jeton d'accès</label>
       <input id="token" name="token" type="password" required autofocus spellcheck="false">
-      <button type="submit">Se connecter</button>
+      <button type="submit" id="login-submit">Se connecter</button>
       <p id="login-error" class="error" role="alert" hidden>Jeton invalide.</p>
     </form>
-    <p class="hint">Le jeton est aussi dans le volume : <code>~/.cloudbox/token</code>.</p>
+    <p class="hint"><span id="login-hint">Le jeton est aussi dans le volume :</span> <code>~/.cloudbox/token</code>.</p>
   </main>
   <script type="module" src="/src/login.ts"></script>
 </body>

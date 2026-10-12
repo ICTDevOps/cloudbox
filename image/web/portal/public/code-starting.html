@@ -2,15 +2,17 @@
 <!-- Servie par Caddy à la place d'un « 502 » quand code-server n'est pas encore prêt (premier
      démarrage : installation des extensions ; redémarrage du container). Se recharge seule. -->
 <html lang="fr">
+<!-- Sans script (CSP stricte) : texte dans les deux langues de l'interface. -->
 <head>
 <meta charset="utf-8">
 <meta http-equiv="refresh" content="2">
-<title>VS Code démarre…</title>
+<title>VS Code démarre… / VS Code is starting…</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin: 0; height: 100vh; display: grid; place-items: center; background: #1f1f1f; color: #cccccc;
          font: 14px system-ui, sans-serif; }
   p { margin: 0.3rem 0; text-align: center; }
+  p[lang="en"]:not(.muted) { margin-top: 1.2rem; }
   .muted { color: #8b8b8b; font-size: 12px; }
 </style>
 </head>
@@ -18,6 +20,8 @@
 <div>
   <p>VS Code démarre…</p>
   <p class="muted">Au premier démarrage, l'installation des extensions prend quelques dizaines de secondes.</p>
+  <p lang="en">VS Code is starting…</p>
+  <p class="muted" lang="en">On first start, installing the extensions takes a few dozen seconds.</p>
 </div>
 </body>
 </html>

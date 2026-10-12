@@ -4,6 +4,7 @@
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Home } from './home';
+import { useLang } from './i18n';
 import { Sidebar } from './sidebar';
 import { useWorkspaces } from './store';
 import { WorkspaceView } from './workspace';
@@ -17,6 +18,7 @@ function routeId(hash: string): string | null {
 }
 
 function App() {
+  useLang(); // changement de langue : tout l'arbre est rendu de nouveau
   const [activeId, setActiveId] = useState(routeId(window.location.hash));
   // Ordre d'affichage stable : déplacer une vue dans le DOM rechargerait ses iframes.
   // L'ordre d'utilisation (pour fermer la plus ancienne au-delà de MAX_ALIVE) est tenu à part.

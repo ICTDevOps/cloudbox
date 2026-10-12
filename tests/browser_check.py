@@ -50,7 +50,8 @@ def tab_titles(page):
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
-    context = browser.new_context(viewport={"width": 1400, "height": 900})
+    # Langue de l'interface : celle du navigateur par défaut (français ici)
+    context = browser.new_context(viewport={"width": 1400, "height": 900}, locale="fr-FR")
     context.grant_permissions(["clipboard-read", "clipboard-write"], origin=BASE)
     page = context.new_page()
     console = []
@@ -333,6 +334,33 @@ with sync_playwright() as p:
     check("workspace supprimé : retour à l'accueil", page.url.endswith("#/") and page.locator(".home .tool-tiles").count() == 1, page.url)
     check("workspace retiré de la barre", page.locator(".sidebar a.nav-item[href='#/w/projet-b']").count() == 0)
     page.screenshot(path=f"{OUT}/7-accueil-final.png", full_page=True)
+
+    # --- Langue de l'interface : anglais, mémorisé, API comprise ; retour au français ---
+    page.click(".sidebar .lang-switch button[lang=en]")
+    page.wait_for_timeout(300)
+    check("interface en anglais", page.locator(".page-title").inner_text() == "Home"
+          and page.locator(".sidebar .nav-new").inner_text().strip().endswith("New workspace"))
+    check("catégories traduites", "Tools" in page.locator(".home .version-card h3").all_text_contents())
+    check("attribut lang du document", page.evaluate("document.documentElement.lang") == "en")
+    page.reload()
+    page.wait_for_selector(".home .tool-tiles", timeout=15000)
+    check("anglais conservé après rechargement", page.locator(".page-title").inner_text() == "Home")
+    err = page.evaluate("fetch('/api/workspaces/x', {method: 'PUT', headers: {'Content-Type': 'application/json', 'Accept-Language': 'en'},"
+                        " body: JSON.stringify({settings: {clientId: 'x'}})}).then(r => r.json())")
+    check("API en anglais", err.get("error", "").startswith("Workspace not found"), err)
+    page.click(f".sidebar a.nav-item[href='#/w/{WS_ID}']")
+    page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
+    check("workspace en anglais", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Connections")
+    page.screenshot(path=f"{OUT}/8-english.png")
+    anon = browser.new_context(locale="fr-FR")
+    login = anon.new_page()
+    login.goto(BASE + "/")
+    login.click("#login-lang button[data-lang=en]")
+    check("page de connexion en anglais", login.locator("#login-submit").inner_text() == "Sign in")
+    anon.close()
+    page.click(".sidebar .lang-switch button[lang=fr]")
+    page.wait_for_timeout(300)
+    check("retour au français", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Connexions")
 
     # --- Console : aucune violation de CSP ni erreur JavaScript du portail ---
     # vsda.js : module propriétaire de VS Code absent de code-server (404 en text/plain, bloqué par

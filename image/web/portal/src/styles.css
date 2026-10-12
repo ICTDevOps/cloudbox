@@ -154,6 +154,16 @@ h2 { font-size: 1.05rem; }
 .nav-new .nav-icon { color: var(--accent); font-weight: 700; }
 .nav-empty { padding: 0.3rem 0.75rem; color: var(--muted); font-size: 0.85rem; }
 .sidebar-foot { margin-top: auto; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+.lang-switch { display: flex; gap: 2px; padding: 0 0.5rem 0.4rem; }
+.lang-switch button {
+  font: 600 0.72rem system-ui, sans-serif; letter-spacing: 0.04em; padding: 0.2rem 0.5rem; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 5px;
+}
+.lang-switch button.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); border-color: var(--accent); }
+.sidebar.collapsed .lang-switch { flex-direction: column; align-items: center; padding: 0 0 0.4rem; }
+.login-card .lang-switch { justify-content: flex-end; padding: 0; margin-bottom: -0.5rem; }
+.login-card .lang-switch button { font-weight: 600; padding: 0.2rem 0.5rem; background: transparent; color: var(--muted); }
+.login-card .lang-switch button.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); }
 
 /* Fenêtre de création */
 .create-dialog {
@@ -410,7 +420,7 @@ body.login { display: grid; place-items: center; min-height: 100vh; padding: 1re
   background: var(--bg); color: var(--text);
 }
 .login-card input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.login-card button {
+.login-card form button {
   font: inherit; font-weight: 600; padding: 0.6rem;
   background: var(--accent); color: var(--accent-text);
   border: none; border-radius: 6px; cursor: pointer;

@@ -1,6 +1,7 @@
 // Barre latérale : accueil, workspaces existants, création, déconnexion. Repliable (mémorisé).
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ENV_LABELS } from './api';
+import { getLang, LANGS, setLang, t } from './i18n';
 import { CreateWorkspace, NEW_WORKSPACE_EVENT } from './home';
 import { useWorkspaces, workspaceStore } from './store';
 
@@ -22,6 +23,7 @@ function initials(name: string): string {
 
 export function Sidebar({ activeId, alive }: { activeId: string | null; alive: readonly string[] }) {
   const { list } = useWorkspaces();
+  const m = t().sidebar;
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const dialog = useRef<HTMLDialogElement>(null);
   const [dialogKey, setDialogKey] = useState(0);
@@ -56,24 +58,24 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
   };
 
   return (
-    <nav class={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label="Navigation">
+    <nav class={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label={m.navigation}>
       <div class="sidebar-head">
-        <a class="brand" href="#/" title="Accueil">
+        <a class="brand" href="#/" title={m.home}>
           <img src="/assets/favicon.svg" alt="" width="26" height="26" />
           <span class="label">Cloudbox</span>
         </a>
         <button type="button" class="sidebar-toggle" onClick={toggle}
-          aria-label={collapsed ? 'Déplier le menu' : 'Replier le menu'} title={collapsed ? 'Déplier le menu' : 'Replier le menu'}>
+          aria-label={collapsed ? m.expand : m.collapse} title={collapsed ? m.expand : m.collapse}>
           {collapsed ? '»' : '«'}
         </button>
       </div>
 
-      <a class={`nav-item${activeId === null ? ' active' : ''}`} href="#/" title="Accueil">
+      <a class={`nav-item${activeId === null ? ' active' : ''}`} href="#/" title={m.home}>
         <span class="nav-icon" aria-hidden="true">⌂</span>
-        <span class="label">Accueil</span>
+        <span class="label">{m.home}</span>
       </a>
 
-      <div class="nav-section"><span class="label">Workspaces</span></div>
+      <div class="nav-section"><span class="label">{m.workspaces}</span></div>
       <ul class="nav-list">
         {list?.map((ws) => (
           <li key={ws.id}>
@@ -82,26 +84,34 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
               <span class={`nav-avatar env-${ws.env}`} aria-hidden="true">{initials(ws.name)}</span>
               <span class="label nav-name">{ws.name}</span>
               <span class={`env-badge env-${ws.env} label`}>{ENV_LABELS[ws.env]}</span>
-              {alive.includes(ws.id) && <span class="alive-dot" title="Ouvert : terminaux et VS Code restent chargés" />}
+              {alive.includes(ws.id) && <span class="alive-dot" title={m.alive} />}
             </a>
           </li>
         ))}
-        {list?.length === 0 && <li class="nav-empty label">Aucun workspace</li>}
+        {list?.length === 0 && <li class="nav-empty label">{m.none}</li>}
       </ul>
-      <button type="button" class="nav-item nav-new" onClick={openCreate} title="Nouveau workspace">
+      <button type="button" class="nav-item nav-new" onClick={openCreate} title={m.newWorkspace}>
         <span class="nav-icon" aria-hidden="true">+</span>
-        <span class="label">Nouveau workspace</span>
+        <span class="label">{m.newWorkspace}</span>
       </button>
 
       <div class="sidebar-foot">
-        <a class="nav-item" href="/_auth/logout" title="Se déconnecter">
+        <div class="lang-switch" role="group" aria-label={m.language}>
+          {LANGS.map((l) => (
+            <button type="button" key={l} class={getLang() === l ? 'active' : ''} aria-pressed={getLang() === l}
+              lang={l} onClick={() => setLang(l)}>
+              {l.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <a class="nav-item" href="/_auth/logout" title={m.logout}>
           <span class="nav-icon" aria-hidden="true">⎋</span>
-          <span class="label">Se déconnecter</span>
+          <span class="label">{m.logout}</span>
         </a>
       </div>
 
-      <dialog class="create-dialog" ref={dialog} aria-label="Nouveau workspace">
-        <button type="button" class="dialog-close" aria-label="Fermer" onClick={() => dialog.current?.close()}>×</button>
+      <dialog class="create-dialog" ref={dialog} aria-label={m.newWorkspace}>
+        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => dialog.current?.close()}>×</button>
         <CreateWorkspace key={dialogKey} onCreated={(id) => {
           dialog.current?.close();
           workspaceStore.reload();

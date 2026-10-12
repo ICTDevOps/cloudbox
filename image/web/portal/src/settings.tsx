@@ -2,17 +2,20 @@
 // SharePoint, ClientId) reprises par le panneau Connexions. Validation définitive par cloudbox-api.
 import { useState } from 'preact/hooks';
 import { api, ENV_LABELS, ENVS, type Env, type Workspace, type WorkspaceSettings } from './api';
+import { t } from './i18n';
 
-const FIELDS: { key: keyof WorkspaceSettings; label: string; placeholder: string; help: string }[] = [
-  { key: 'tenant', label: 'Tenant', placeholder: 'contoso.onmicrosoft.com ou GUID',
-    help: 'az, azd, Az PowerShell, Graph, Teams, PnP, m365. Le GUID permet de vérifier le tenant de la connexion az.' },
-  { key: 'subscription', label: 'Abonnement Azure (GUID)', placeholder: '00000000-0000-0000-0000-000000000000',
-    help: 'az account set, Connect-AzAccount.' },
-  { key: 'sharepointUrl', label: 'URL SharePoint', placeholder: 'https://contoso.sharepoint.com',
-    help: 'PnP PowerShell. Déduite du tenant <nom>.onmicrosoft.com si vide.' },
-  { key: 'clientId', label: "ClientId de l'application Entra", placeholder: '00000000-0000-0000-0000-000000000000',
-    help: 'PnP PowerShell et CLI for Microsoft 365 (application à enregistrer dans le tenant).' },
-];
+type Field = { key: keyof WorkspaceSettings; label: string; placeholder: string; help: string };
+
+function fields(): Field[] {
+  const m = t().settings;
+  const guid = '00000000-0000-0000-0000-000000000000';
+  return [
+    { key: 'tenant', label: m.tenant, placeholder: m.tenantPlaceholder, help: m.tenantHelp },
+    { key: 'subscription', label: m.subscription, placeholder: guid, help: m.subscriptionHelp },
+    { key: 'sharepointUrl', label: m.sharepoint, placeholder: 'https://contoso.sharepoint.com', help: m.sharepointHelp },
+    { key: 'clientId', label: m.clientId, placeholder: guid, help: m.clientIdHelp },
+  ];
+}
 
 export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
   ws: Workspace;
@@ -25,11 +28,13 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
   const [values, setValues] = useState<WorkspaceSettings>({ ...ws.settings });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const m = t();
+  const FIELDS = fields();
 
   const submit = async (event: Event) => {
     event.preventDefault();
     setError('');
-    if (env === 'prd' && ws.env !== 'prd' && !window.confirm('Passer ce workspace en PRD (production) ?')) return;
+    if (env === 'prd' && ws.env !== 'prd' && !window.confirm(m.settings.confirmPrd)) return;
     setBusy(true);
     const settings: WorkspaceSettings = {};
     for (const f of FIELDS) {
@@ -46,10 +51,7 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
   };
 
   const remove = async () => {
-    const ok = window.confirm(
-      `Supprimer le workspace « ${ws.name} » ?\n\nSes sessions de terminal seront fermées.\n` +
-        `Le dossier ${ws.folder} est conservé.`,
-    );
+    const ok = window.confirm(m.settings.confirmDelete(ws.name, ws.folder));
     if (!ok) return;
     setBusy(true);
     try {
@@ -63,13 +65,13 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
 
   return (
     <form class="card create-ws ws-settings" onSubmit={submit}>
-      <h2>Paramètres du workspace</h2>
+      <h2>{m.settings.title}</h2>
       <label>
-        Nom
+        {m.common.name}
         <input value={name} onInput={(e) => setName(e.currentTarget.value)} required maxLength={64} />
       </label>
       <fieldset class="env-choice">
-        <legend>Environnement</legend>
+        <legend>{m.common.environment}</legend>
         {ENVS.map((value) => (
           <label class={`env-option env-${value}${env === value ? ' selected' : ''}`} key={value}>
             <input type="radio" name="settings-env" value={value} checked={env === value} onChange={() => setEnv(value)} />
@@ -77,7 +79,7 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
           </label>
         ))}
       </fieldset>
-      <h3 class="settings-sub">Connexions</h3>
+      <h3 class="settings-sub">{m.settings.connections}</h3>
       {FIELDS.map((f) => (
         <label key={f.key}>
           {f.label}
@@ -87,19 +89,19 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
         </label>
       ))}
       <p class="muted field-help">
-        Identifiant <code>{ws.id}</code> et dossier <code>{ws.folder}</code> : non modifiables.
+        {m.settings.fixed(ws.id, ws.folder).map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part))}
       </p>
       {error && <p class="error" role="alert">{error}</p>}
       <div class="ws-actions">
-        <button type="submit" class="button primary" disabled={busy}>Enregistrer</button>
-        <button type="button" class="button ghost" onClick={onCancel}>Annuler</button>
+        <button type="submit" class="button primary" disabled={busy}>{m.common.save}</button>
+        <button type="button" class="button ghost" onClick={onCancel}>{m.common.cancel}</button>
       </div>
       <div class="danger-zone">
         <div>
-          <strong>Supprimer ce workspace</strong>
-          <p class="field-help">Ferme ses sessions de terminal ; le dossier de travail est conservé.</p>
+          <strong>{m.settings.deleteTitle}</strong>
+          <p class="field-help">{m.settings.deleteHelp}</p>
         </div>
-        <button type="button" class="button danger" onClick={remove} disabled={busy}>Supprimer</button>
+        <button type="button" class="button danger" onClick={remove} disabled={busy}>{m.common.delete}</button>
       </div>
     </form>
   );

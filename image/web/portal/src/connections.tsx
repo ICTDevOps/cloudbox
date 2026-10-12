@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type CloudContext, type Workspace, type WorkspaceSettings } from './api';
 import { useCloudContext } from './context';
 import type { DockHandle, TerminalRef } from './dock';
+import { t } from './i18n';
 
 // 'pwsh' : cmdlet PowerShell, insérable seulement dans un terminal PowerShell
 type CommandShell = 'any' | 'pwsh';
@@ -39,33 +40,35 @@ export function connectionCommands(s: WorkspaceSettings = {}): ConnectionCommand
     for (const m of command.matchAll(/<([^>]+)>/g)) missing.push(m[1]);
     cmds.push({ ...c, command, missing });
   };
-  const t = s.tenant;
+  const m = t().conn;
+  const tenant = s.tenant;
   const spo = sharepointUrl(s);
+  const [azure, m365, tools] = [m.groupAzure, m.groupM365, m.groupTools];
 
-  add({ id: 'az', group: 'Azure', label: 'Azure CLI', shell: 'any', status: 'azureCli' },
-    ['az login --use-device-code', t && `--tenant ${t}`]);
-  add({ id: 'az-sub', group: 'Azure', label: 'Azure CLI : abonnement', shell: 'any', status: 'azureCli' },
-    ['az account set --subscription', s.subscription ?? '<abonnement>']);
-  add({ id: 'azd', group: 'Azure', label: 'Azure Developer CLI', shell: 'any' },
-    ['azd auth login --use-device-code', t && `--tenant-id ${t}`]);
-  add({ id: 'azps', group: 'Azure', label: 'Az PowerShell', shell: 'pwsh', status: 'azPowerShell' },
-    ['Connect-AzAccount -UseDeviceAuthentication', t && `-Tenant ${t}`, s.subscription && `-Subscription ${s.subscription}`]);
-  add({ id: 'aks', group: 'Azure', label: 'AKS (Entra ID)', shell: 'any', status: 'kubernetes' },
+  add({ id: 'az', group: azure, label: 'Azure CLI', shell: 'any', status: 'azureCli' },
+    ['az login --use-device-code', tenant && `--tenant ${tenant}`]);
+  add({ id: 'az-sub', group: azure, label: m.azSub, shell: 'any', status: 'azureCli' },
+    ['az account set --subscription', s.subscription ?? `<${m.subscriptionPlaceholder}>`]);
+  add({ id: 'azd', group: azure, label: 'Azure Developer CLI', shell: 'any' },
+    ['azd auth login --use-device-code', tenant && `--tenant-id ${tenant}`]);
+  add({ id: 'azps', group: azure, label: 'Az PowerShell', shell: 'pwsh', status: 'azPowerShell' },
+    ['Connect-AzAccount -UseDeviceAuthentication', tenant && `-Tenant ${tenant}`, s.subscription && `-Subscription ${s.subscription}`]);
+  add({ id: 'aks', group: azure, label: 'AKS (Entra ID)', shell: 'any', status: 'kubernetes' },
     ['az aks get-credentials -g <rg> -n <cluster> && kubelogin convert-kubeconfig -l azurecli']);
 
-  add({ id: 'graph', group: 'Microsoft 365', label: 'Microsoft Graph', shell: 'pwsh', status: 'session' },
-    ['Connect-MgGraph -UseDeviceCode -Scopes "User.Read.All"', t && `-TenantId ${t}`]);
-  add({ id: 'exo', group: 'Microsoft 365', label: 'Exchange Online', shell: 'pwsh', status: 'session' },
+  add({ id: 'graph', group: m365, label: 'Microsoft Graph', shell: 'pwsh', status: 'session' },
+    ['Connect-MgGraph -UseDeviceCode -Scopes "User.Read.All"', tenant && `-TenantId ${tenant}`]);
+  add({ id: 'exo', group: m365, label: 'Exchange Online', shell: 'pwsh', status: 'session' },
     ['Connect-ExchangeOnline -Device']);
-  add({ id: 'teams', group: 'Microsoft 365', label: 'Microsoft Teams', shell: 'pwsh', status: 'session' },
-    ['Connect-MicrosoftTeams -UseDeviceAuthentication', t && `-TenantId ${t}`]);
-  add({ id: 'pnp', group: 'Microsoft 365', label: 'PnP PowerShell', shell: 'pwsh', status: 'session' },
+  add({ id: 'teams', group: m365, label: 'Microsoft Teams', shell: 'pwsh', status: 'session' },
+    ['Connect-MicrosoftTeams -UseDeviceAuthentication', tenant && `-TenantId ${tenant}`]);
+  add({ id: 'pnp', group: m365, label: 'PnP PowerShell', shell: 'pwsh', status: 'session' },
     ['Connect-PnPOnline -Url', spo ?? 'https://<tenant>.sharepoint.com', '-DeviceLogin -ClientId', s.clientId ?? '<app-id>',
-      t && `-Tenant ${t}`]);
-  add({ id: 'm365', group: 'Microsoft 365', label: 'CLI for Microsoft 365', shell: 'any' },
-    ['m365 login --authType deviceCode', t && `--tenant ${t}`, s.clientId && `--appId ${s.clientId}`]);
+      tenant && `-Tenant ${tenant}`]);
+  add({ id: 'm365', group: m365, label: 'CLI for Microsoft 365', shell: 'any' },
+    ['m365 login --authType deviceCode', tenant && `--tenant ${tenant}`, s.clientId && `--appId ${s.clientId}`]);
 
-  add({ id: 'gh', group: 'Outils', label: 'GitHub CLI', shell: 'any', status: 'github' }, ['gh auth login']);
+  add({ id: 'gh', group: tools, label: 'GitHub CLI', shell: 'any', status: 'github' }, ['gh auth login']);
   return cmds;
 }
 
@@ -73,42 +76,46 @@ type Status = { state: 'on' | 'off' | 'warn' | 'info'; text: string; title?: str
 
 function statusOf(key: StatusKey | undefined, ctx: CloudContext | null, s: WorkspaceSettings): Status | null {
   if (!key || !ctx) return null;
+  const m = t().conn;
+  const c = t().context;
   if (key === 'session') {
-    return { state: 'info', text: 'par terminal', title: 'Connexion propre à chaque session PowerShell : non visible depuis le portail' };
+    return { state: 'info', text: m.perTerminal, title: m.perTerminalTitle };
   }
   if (key === 'azureCli' || key === 'azPowerShell') {
     const az = ctx[key];
-    if (!az) return { state: 'off', text: 'non connecté' };
+    if (!az) return { state: 'off', text: c.notConnected };
     const title = `${az.user}\n${az.subscription} (${az.subscriptionId})\nTenant ${az.tenantId}`;
     // Le tenant du workspace n'est comparable que sous forme de GUID
     if (s.tenant && GUID_RE.test(s.tenant) && s.tenant.toLowerCase() !== az.tenantId.toLowerCase()) {
-      return { state: 'warn', text: 'autre tenant', title };
+      return { state: 'warn', text: m.otherTenant, title };
     }
     if (s.subscription && s.subscription.toLowerCase() !== az.subscriptionId.toLowerCase()) {
-      return { state: 'warn', text: 'autre abonnement', title };
+      return { state: 'warn', text: m.otherSubscription, title };
     }
     return { state: 'on', text: az.subscription || az.user, title };
   }
   if (key === 'kubernetes') {
-    return ctx.kubernetes ? { state: 'on', text: ctx.kubernetes.context } : { state: 'off', text: 'aucun contexte' };
+    return ctx.kubernetes ? { state: 'on', text: ctx.kubernetes.context } : { state: 'off', text: c.noContext };
   }
   return ctx.github
     ? { state: 'on', text: ctx.github.user || ctx.github.host, title: ctx.github.host }
-    : { state: 'off', text: 'non connecté' };
+    : { state: 'off', text: c.notConnected };
 }
 
 export function CopyButton({ text }: { text: string }) {
-  const [label, setLabel] = useState('Copier');
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const m = t().conn;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setLabel('Copié');
+      setState('copied');
     } catch {
-      setLabel('Échec');
+      setState('failed');
     }
-    window.setTimeout(() => setLabel('Copier'), 1500);
+    window.setTimeout(() => setState('idle'), 1500);
   };
-  return <button type="button" class="copy" onClick={copy} aria-label={`Copier : ${text}`}>{label}</button>;
+  const label = state === 'copied' ? m.copied : state === 'failed' ? m.copyFailed : m.copy;
+  return <button type="button" class="copy" onClick={copy} aria-label={m.copyLabel(text)}>{label}</button>;
 }
 
 function CommandRow({ cmd, status, target, onInsert }: {
@@ -118,31 +125,28 @@ function CommandRow({ cmd, status, target, onInsert }: {
   onInsert: (cmd: ConnectionCommand, target: TerminalRef) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
-  const insertTitle = target
-    ? `Saisir dans ${target.title}, sans l'exécuter`
-    : cmd.shell === 'pwsh'
-      ? 'Commande PowerShell : ouvrez un terminal PowerShell'
-      : 'Ouvrez un terminal dans ce workspace';
+  const m = t().conn;
+  const insertTitle = target ? m.insertInto(target.title) : cmd.shell === 'pwsh' ? m.needPwsh : m.needTerminal;
   return (
     <li class="conn-item" data-cmd={cmd.id}>
       <div class="conn-head">
         <span class="conn-label">{cmd.label}</span>
-        {cmd.shell === 'pwsh' && <span class="conn-shell" title="Cmdlet PowerShell">PS</span>}
+        {cmd.shell === 'pwsh' && <span class="conn-shell" title={m.cmdlet}>PS</span>}
         {status && <span class={`conn-status ${status.state}`} title={status.title}>{status.text}</span>}
       </div>
       <code class="conn-cmd">{cmd.command}</code>
       <div class="conn-actions">
-        {cmd.missing.length > 0 && <span class="conn-missing">à compléter : {cmd.missing.join(', ')}</span>}
+        {cmd.missing.length > 0 && <span class="conn-missing">{m.toComplete} {cmd.missing.join(', ')}</span>}
         <CopyButton text={cmd.command} />
         <button type="button" class="copy insert" disabled={!target || busy} title={insertTitle}
-          aria-label={`Insérer : ${cmd.label}`}
+          aria-label={m.insertLabel(cmd.label)}
           onClick={async () => {
             if (!target) return;
             setBusy(true);
             await onInsert(cmd, target);
             setBusy(false);
           }}>
-          ▶ {target ? target.title : 'Insérer'}
+          ▶ {target ? target.title : m.insert}
         </button>
       </div>
     </li>
@@ -159,6 +163,7 @@ export function ConnectionsDrawer({ ws, dock, onClose, onEditSettings }: {
   const [filter, setFilter] = useState('');
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const filterRef = useRef<HTMLInputElement>(null);
+  const m = t().conn;
   const settings = ws.settings ?? {};
   const cloud = ctx && ctx !== 'error' ? ctx : null;
 
@@ -174,7 +179,7 @@ export function ConnectionsDrawer({ ws, dock, onClose, onEditSettings }: {
   const insert = async (cmd: ConnectionCommand, target: TerminalRef) => {
     try {
       await api.sendInput(ws.id, target.session, cmd.command);
-      setMessage({ text: `Saisi dans ${target.title} : relisez, puis Entrée pour exécuter.` });
+      setMessage({ text: m.inserted(target.title) });
       dock?.focusPanel(target.panelId);
     } catch (err) {
       setMessage({ text: (err as Error).message, error: true });
@@ -182,20 +187,20 @@ export function ConnectionsDrawer({ ws, dock, onClose, onEditSettings }: {
   };
 
   return (
-    <aside class="conn-drawer" aria-label="Connexions"
+    <aside class="conn-drawer" aria-label={t().common.connections}
       onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <div class="conn-top">
-        <h2>Connexions</h2>
-        <button type="button" class="dialog-close" aria-label="Fermer le panneau Connexions" title="Fermer (Échap)"
+        <h2>{t().common.connections}</h2>
+        <button type="button" class="dialog-close" aria-label={m.closePanel} title={m.closeEsc}
           onClick={onClose}>×</button>
       </div>
-      <input ref={filterRef} class="conn-filter" type="search" placeholder="Filtrer (graph, pnp, az…)" value={filter}
-        onInput={(e) => setFilter(e.currentTarget.value)} aria-label="Filtrer les commandes" />
+      <input ref={filterRef} class="conn-filter" type="search" placeholder={m.filter} value={filter}
+        onInput={(e) => setFilter(e.currentTarget.value)} aria-label={m.filterLabel} />
       <p class="conn-settings muted">
         {configured
-          ? <>Complétées avec les paramètres du workspace{settings.tenant && <> (tenant <code>{settings.tenant}</code>)</>}.</>
-          : <>Renseignez le tenant et les identifiants du workspace pour obtenir des commandes complètes.</>}
-        {' '}<button type="button" class="link-button" onClick={onEditSettings}>Paramètres</button>
+          ? <>{m.completedWith}{settings.tenant && <> ({m.tenant} <code>{settings.tenant}</code>)</>}.</>
+          : <>{m.fillIn}</>}
+        {' '}<button type="button" class="link-button" onClick={onEditSettings}>{t().common.settings}</button>
       </p>
       {message && <p class={`conn-message${message.error ? ' error' : ''}`} role="status">{message.text}</p>}
       <div class="conn-list">
@@ -210,12 +215,9 @@ export function ConnectionsDrawer({ ws, dock, onClose, onEditSettings }: {
             </ul>
           </section>
         ))}
-        {cmds.length === 0 && <p class="muted">Aucune commande ne correspond.</p>}
+        {cmds.length === 0 && <p class="muted">{m.none}</p>}
       </div>
-      <p class="conn-foot muted">
-        ▶ saisit la commande dans le dernier terminal utilisé (PowerShell pour les cmdlets), sans l'exécuter.
-        Raccourci : Ctrl+Maj+K.
-      </p>
+      <p class="conn-foot muted">{m.foot}</p>
     </aside>
   );
 }
