@@ -10,7 +10,7 @@
   "dependencies": {
     "dockview": "8.4.1",
     "dockview-core": "8.4.1",
-    "preact": "10.29.8"
+    "preact": "11.0.1"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
