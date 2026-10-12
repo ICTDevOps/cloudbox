@@ -40,15 +40,71 @@ browser ──http://localhost:8080──▶ cloudbox container
 - Reachable **from the PC only** (`127.0.0.1`), protected by a token.
 - Classic terminal access still works: `docker exec -it cloudbox pwsh`.
 
-## Getting started
+## Quick start
+
+**Requirements:** Docker Desktop (Windows 11 with WSL2, macOS) or Docker Engine / Podman (Linux),
+on amd64 or arm64. No GitHub account is needed: the image is public. The download is about 1.6 GB
+(every Azure and Microsoft 365 PowerShell module is included), so the first start takes a while.
+
+**1. Get the compose file** (no need to clone the repository):
+
+```bash
+# Linux, macOS, Windows (Git Bash / WSL)
+mkdir cloudbox && cd cloudbox
+curl -fsSLO https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/compose.yaml
+```
+
+```powershell
+# Windows PowerShell
+mkdir cloudbox; cd cloudbox
+Invoke-WebRequest https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/compose.yaml -OutFile compose.yaml
+```
+
+**2. Start Cloudbox and read the access token:**
 
 ```bash
 docker compose up -d
-docker compose exec cloudbox cat /home/dev/.cloudbox/token     # token generated on first start
+docker compose logs cloudbox        # the token is printed in a framed block
 ```
 
-Open http://localhost:8080 and paste the token. It is also shown in `docker compose logs
-cloudbox`, kept in the volume (`~/.cloudbox/token`) and stays the same across restarts.
+**3. Open http://localhost:8080** and paste the token.
+
+The token is generated on first start, kept in the volume (`~/.cloudbox/token`) and stays the
+same across restarts. It can also be read with
+`docker compose exec cloudbox cat /home/dev/.cloudbox/token`.
+
+**Without compose**, a single command does the same:
+
+```bash
+docker run -d --name cloudbox --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 -v cloudbox-home:/home/dev \
+  ghcr.io/ictdevops/cloudbox:web
+docker logs cloudbox
+```
+
+Always publish the port on `127.0.0.1` as above: the web terminal holds your Azure and
+Microsoft 365 sign-ins and must not be reachable from the network.
+
+**Update, stop, remove:**
+
+| Action | Command |
+|---|---|
+| Update to the latest weekly image | `docker compose pull && docker compose up -d` |
+| Stop / start | `docker compose stop` / `docker compose start` |
+| Remove the container (sign-ins and files are kept) | `docker compose down` |
+| Remove everything, volume included | `docker compose down -v` |
+
+Updating recreates the container: the volume (`/home/dev`) keeps sign-ins, keys, workspaces and
+files, but open tmux sessions are closed.
+
+## Getting started from a clone
+
+```bash
+git clone https://github.com/ICTDevOps/cloudbox
+cd cloudbox
+docker compose up -d
+docker compose logs cloudbox
+```
 
 Settings (`.env` file next to `compose.yaml`, ignored by git; template: `.env.example`):
 
@@ -209,8 +265,17 @@ patch/minor updates are merged automatically when everything is green, major one
 review. Automatic merging requires the protection of `main` to require the `build` workflow
 status.
 
+Updates merged by Renovate during the week are published right away under `:edge`; they reach
+`:web` and `:latest` with the weekly build (Monday, 04:00 UTC). Use `:edge` to follow `main` as
+it moves, `:web` for a version that changes once a week.
+
 ## Origin
 
 Inspired by [WSLC](https://github.com/CTroessaert/WSLC) (CTroessaert), a `wslc` container for
 Azure / Microsoft 365 administration. Cloudbox takes over its principles (pinned versions,
 Renovate, persistent home) and adds the web interface. No WSLC code is reused.
+
+## License
+
+[MIT](LICENSE). The tools included in the image keep their own licenses (Terraform: BSL 1.1, see
+[Tools](#tools)).
