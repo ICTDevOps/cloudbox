@@ -35,7 +35,7 @@ L'accès terminal classique (`docker exec`, profil Windows Terminal) reste possi
 
 - Le Dockerfile des outils CLI : az, azd, Bicep, PowerShell 7 + modules Az, Microsoft.Graph,
   ExchangeOnlineManagement, MicrosoftTeams, PnP.PowerShell, CLI for Microsoft 365, Node.js LTS,
-  kubectl, helm, gh, et les outils de base.
+  kubectl, helm, gh, et les outils de base (détail dans « Outils de base » ci-dessous).
 - **Versions épinglées** : une ligne `ARG <OUTIL>_VERSION` par outil, précédée d'un commentaire
   `# renovate: datasource=… depName=…`. Ne jamais installer un outil en « latest ».
 - **Renovate** : une PR par outil, `minimumReleaseAge` de 3 jours, fusion automatique des
@@ -45,6 +45,31 @@ L'accès terminal classique (`docker exec`, profil Windows Terminal) reste possi
 - **`/home/dev` en volume persistant** : jetons, `~/.azure`, clés SSH, modules `CurrentUser`
   survivent à la recréation du container.
 - Utilisateur non-root `dev` (uid 1000), télémétrie des CLI désactivée.
+
+## Outils de base (paquets Ubuntu, image `:cli`)
+
+Bash est un shell de premier plan, au même niveau que PowerShell : entrée `/term/bash/` dans le
+portail, complétion (`bash-completion`) activée pour az, kubectl, helm, gh, et un `.bashrc` par
+défaut soigné (prompt avec contexte git et kube, alias courants). `CLOUDBOX_SHELL=pwsh|bash`
+choisit le shell par défaut de `docker exec` et du terminal intégré de VS Code.
+
+Paquets Ubuntu à installer (suivis par l'`apt upgrade` du build hebdomadaire, pas d'épinglage) :
+
+| Catégorie | Paquets |
+|---|---|
+| Shell et confort | `bash`, `bash-completion`, `tmux`, `less`, `vim`, `nano`, `tree`, `fzf`, `ripgrep`, `bat`, `htop` |
+| Certificats et crypto | `openssl`, `ca-certificates`, `gnupg` |
+| Réseau | `curl`, `wget`, `dnsutils` (dig, nslookup), `iputils-ping`, `traceroute`, `mtr-tiny`, `netcat-openbsd`, `whois`, `iproute2`, `openssh-client` |
+| Données | `jq`, `yq`, `unzip`, `zip`, `rsync` |
+| Dev | `git`, `git-lfs`, `python3`, `python3-pip`, `pipx`, `make` |
+| Système | `sudo`, `tzdata`, `locales` |
+
+À vérifier au moment de l'installation : le paquet Ubuntu `yq` peut être la variante Python
+(kislyuk) et non celle de mikefarah ; si c'est le cas, installer la version mikefarah depuis ses
+releases GitHub, épinglée avec Renovate. Sur Ubuntu, `bat` s'appelle `batcat` : ajouter un alias.
+
+`openssl` sert notamment à inspecter et convertir les certificats (PEM / PFX / CER) pour les
+App Registrations, Key Vault et les connexions PowerShell par certificat.
 
 ## Architecture
 
