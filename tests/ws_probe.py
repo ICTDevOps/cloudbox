@@ -74,7 +74,7 @@ def main() -> int:
     sock = socket.create_connection((host, port), timeout=10)
     key = base64.b64encode(os.urandom(16)).decode()
     lines = [
-        f"GET {u.path} HTTP/1.1",
+        f"GET {u.path}{'?' + u.query if u.query else ''} HTTP/1.1",
         f"Host: {host}:{port}",
         "Upgrade: websocket",
         "Connection: Upgrade",
@@ -104,9 +104,9 @@ def main() -> int:
     buf = bytearray(rest)
     # Message d'initialisation attendu par ttyd avant de lancer le processus
     sock.sendall(frame(json.dumps({"AuthToken": "", "columns": 120, "rows": 30}).encode()))
-    read_frames(sock, buf, 8)                     # bannière et prompt
+    banner = read_frames(sock, buf, 8)            # bannière et prompt (ou message de refus)
     sock.sendall(frame(b"0" + command.encode() + b"\r"))
-    output = read_frames(sock, buf, 6)
+    output = banner + read_frames(sock, buf, 6)
     sock.sendall(frame(b"", opcode=0x8))
     sock.close()
     sys.stdout.write(output.decode(errors="replace"))

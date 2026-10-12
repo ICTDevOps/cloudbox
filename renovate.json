@@ -5,16 +5,21 @@
     "helpers:pinGitHubActionDigestsToSemver"
   ],
   "timezone": "Europe/Paris",
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "minimumReleaseAge": "3 days",
   "internalChecksFilter": "strict",
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Outils épinglés dans les Dockerfile : commentaire « # renovate: » au-dessus d'une ligne ARG <OUTIL>_VERSION",
-      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "description": "Versions épinglées par un commentaire « # renovate: » au-dessus d'une ligne ARG <OUTIL>_VERSION (Dockerfile) ou <OUTIL>_VERSION= (scripts de test)",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile$/",
+        "/^tests/.+\\.sh$/"
+      ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?(?: versioning=(?<versioning>\\S+))?\\s+ARG [A-Z0-9_]+=(?<currentValue>\\S+)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?(?: versioning=(?<versioning>\\S+))?\\s+(?:ARG )?[A-Z0-9_]+=(?<currentValue>\\S+)"
       ]
     }
   ],
@@ -30,26 +35,52 @@
   "packageRules": [
     {
       "description": "Patch et minor : fusion automatique si le build et le test de fumée sont verts",
-      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
       "automerge": true,
       "automergeType": "pr"
     },
     {
       "description": "Versions majeures : revue manuelle",
-      "matchUpdateTypes": ["major"],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "automerge": false,
-      "labels": ["dependencies", "major"]
+      "labels": [
+        "dependencies",
+        "major"
+      ]
     },
     {
       "description": "Node.js : rester sur les versions LTS",
-      "matchDatasources": ["node-version"],
-      "matchPackageNames": ["node"],
+      "matchDatasources": [
+        "node-version"
+      ],
+      "matchPackageNames": [
+        "node"
+      ],
       "versioning": "node"
     },
     {
+      "description": "@types/node suit la version majeure de Node.js de l'image (NODE_VERSION) : à changer avec elle",
+      "matchPackageNames": [
+        "@types/node"
+      ],
+      "allowedVersions": "24.x"
+    },
+    {
       "description": "L'image :web part de l'image :cli construite dans le même workflow",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["ghcr.io/ictdevops/cloudbox"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/ictdevops/cloudbox"
+      ],
       "enabled": false
     }
   ]

@@ -105,6 +105,41 @@ h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/code/?fold
 grep -qi "^x-frame-options: SAMEORIGIN" <<<"$h" && pass "X-Frame-Options: SAMEORIGIN sur /code/ (webviews)" || fail "X-Frame-Options de /code/"
 grep -qi "^content-security-policy: .*script-src 'self';" <<<"$h" && fail "CSP stricte du portail appliquée à /code/" || pass "pas de CSP stricte sur /code/"
 
+section "API et workspaces"
+api() { docker exec "$NAME" curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${AUTH[@]}" "$@" | tr -d '\r'; }
+JSON=(-H 'Content-Type: application/json' -H "Origin: $BASE")
+expect "GET /api/workspaces sans jeton" 401 "$(http "$BASE/api/workspaces")"
+expect "GET /api/context" 200 "$(api "$BASE/api/context")"
+expect "POST sans Content-Type JSON (CSRF)" 415 "$(api -X POST -H 'Content-Type: text/plain' -d '{"id":"x","name":"x","env":"dev"}' "$BASE/api/workspaces")"
+expect "POST identifiant invalide" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"../x","name":"x","env":"dev"}' "$BASE/api/workspaces")"
+expect "POST dossier hors /home/dev" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"dev","folder":"/etc"}' "$BASE/api/workspaces")"
+expect "POST dossier ../../etc" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"dev","folder":"../../etc"}' "$BASE/api/workspaces")"
+expect "POST environnement invalide" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"prod"}' "$BASE/api/workspaces")"
+expect "POST workspace client" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev"}' "$BASE/api/workspaces")"
+expect "POST workspace client-prd" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client-prd","name":"Client PRD","env":"prd"}' "$BASE/api/workspaces")"
+expect "POST doublon" 409 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev"}' "$BASE/api/workspaces")"
+expect "dossier créé" "dev" "$(docker exec "$NAME" stat -c %U /home/dev/workspaces/client)"
+expect "liste des workspaces" "client client-prd" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces" | docker exec -i "$NAME" jq -r '[.[].id] | sort | join(" ")')"
+expect "PUT disposition" 200 "$(api -X PUT "${JSON[@]}" -d '{"layout":{"grid":{}},"nextPanel":3}' "$BASE/api/workspaces/client")"
+expect "PUT nextPanel ne recule pas" 3 "$(api -X PUT "${JSON[@]}" -d '{"nextPanel":1}' "$BASE/api/workspaces/client" >/dev/null; docker exec "$NAME" jq .nextPanel /home/dev/.cloudbox/workspaces/client.json)"
+
+out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" '"cwd=" + (Get-Location) + " ws=" + $env:CLOUDBOX_WORKSPACE')
+grep -q 'cwd=/home/dev/workspaces/client ws=client' <<<"$out" && pass "panneau de workspace : dossier et variable" || fail "panneau de workspace : $(tail -c 300 <<<"$out")"
+probe "$BASE/term/bash/ws?arg=client-prd~2" "$TOKEN" "$BASE" 'echo ok' >/dev/null
+for bad in '../x~1' 'client~1&arg=other~2' 'inconnu~1' 'client' 'Client~1'; do
+    out=$(probe "$BASE/term/pwsh/ws?arg=$bad" "$TOKEN" "$BASE" 'echo should-not-run')
+    grep -q 'Cloudbox :' <<<"$out" && pass "argument refusé : $bad" || fail "argument accepté : $bad"
+done
+expect "sessions tmux des workspaces" "client-prd_bash_2 client_pwsh_1" "$(docker exec "$NAME" tmux ls -F '#S' | grep _ | sort | tr '\n' ' ' | sed 's/ $//')"
+expect "GET workspace : sessions" "client_pwsh_1" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client" | docker exec -i "$NAME" jq -r '.sessions | join(" ")')"
+expect "DELETE session d'un autre workspace" 400 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/client/sessions/client-prd_bash_2")"
+expect "DELETE workspace client" 204 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/client")"
+expect "sessions restantes (client-prd intact)" "client-prd_bash_2" "$(docker exec "$NAME" tmux ls -F '#S' | grep _ | sort | tr '\n' ' ' | sed 's/ $//')"
+expect "dossier conservé après suppression" "yes" "$(docker exec "$NAME" test -d /home/dev/workspaces/client && echo yes)"
+expect "DELETE session client-prd_bash_2" 204 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/client-prd/sessions/client-prd_bash_2")"
+h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/term/pwsh/" | tr -d '\r')
+grep -qi '^x-frame-options: SAMEORIGIN' <<<"$h" && pass "terminal affichable en iframe de même origine" || fail "X-Frame-Options du terminal"
+
 section "Terminal web et session tmux"
 out=$(probe "$BASE/term/pwsh/ws" "$TOKEN" "$BASE" '$cloudboxProbe = "persistant-42"; "PS=" + $PSVersionTable.PSVersion.Major')
 grep -q 'PS=7' <<<"$out" && pass "/term/pwsh/ ouvre PowerShell 7" || fail "/term/pwsh/ : PowerShell 7 non détecté"
