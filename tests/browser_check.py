@@ -111,6 +111,33 @@ with sync_playwright() as p:
     check("largeur restaurée", abs(page.locator(".dv-groupview").first.bounding_box()["width"] - width_saved) < 5)
     check("aucune session fermée par le rechargement", sessions(page) == expected_sessions, sessions(page))
 
+    # --- Deux onglets sur le même workspace : chacun ajoute un terminal, sessions distinctes ---
+    page2 = context.new_page()
+    page2.on("dialog", lambda d: d.accept())
+    page2.goto(f"{BASE}/#/w/{WS_ID}")
+    page2.wait_for_selector(".dock .dv-tab", timeout=20000)
+    page2.wait_for_timeout(3000)
+    before_two = set(sessions(page))
+    page.click("text=+ PowerShell")
+    page2.click("text=+ PowerShell")
+    page.wait_for_timeout(6000)
+    new_sessions = sorted(set(sessions(page)) - before_two)
+    check("deux onglets : deux nouvelles sessions distinctes", len(new_sessions) == 2, new_sessions)
+    page2.close()
+    page.reload()
+    page.wait_for_selector(".dock .dv-tab", timeout=20000)
+    page.wait_for_timeout(3000)
+    # On revient à la disposition attendue par la suite : fermeture des panneaux ajoutés par cette page
+    for title in [t for t in tab_titles(page) if t not in ("Bash 2", "PowerShell 1", "PowerShell 3", "VS Code")]:
+        page.locator(".dv-tab", has_text=title).locator(".cb-tab-close").click()
+        page.wait_for_timeout(1500)
+    for s in new_sessions:  # session de l'autre onglet, absente de cette disposition (dernière sauvegarde gagnante)
+        page.evaluate(f"fetch('/api/workspaces/{WS_ID}/sessions/{s}', {{method: 'DELETE', headers: {{'Content-Type': 'application/json'}}}})")
+    page.wait_for_timeout(1500)
+    expected_sessions = sessions(page)
+    check("retour à la disposition de référence", tab_titles(page) == ["Bash 2", "PowerShell 1", "PowerShell 3", "VS Code"],
+          tab_titles(page))
+
     # --- Déplacer un onglet ne ferme pas de session ---
     src_tab = page.locator(".dv-tab", has_text="PowerShell 3")
     dst = page.locator(".dv-groupview").last.bounding_box()

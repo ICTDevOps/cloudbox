@@ -7,7 +7,8 @@
 //   GET    /api/workspaces                            liste (sans les dispositions)
 //   POST   /api/workspaces                            création { id, name, env, folder? }
 //   GET    /api/workspaces/:id                        workspace complet + sessions tmux actives
-//   PUT    /api/workspaces/:id                        mise à jour partielle { name?, env?, layout?, nextPanel? }
+//   PUT    /api/workspaces/:id                        mise à jour partielle { name?, env?, layout? }
+//   POST   /api/workspaces/:id/panels                 attribue un numéro de panneau terminal { n }
 //   DELETE /api/workspaces/:id                        suppression (le dossier de travail est conservé)
 //   DELETE /api/workspaces/:id/sessions/:session      fermeture d'une session tmux du workspace
 //
@@ -35,7 +36,8 @@ interface Workspace {
   name: string;
   env: Env;
   folder: string;
-  // Compteur des panneaux terminal : chaque panneau garde son numéro, donc sa session tmux
+  // Compteur des panneaux terminal, tenu par le serveur : un numéro attribué n'est jamais réutilisé,
+  // même avec plusieurs onglets ouverts sur le workspace
   nextPanel: number;
   layout: unknown;
   created: string;
@@ -51,6 +53,18 @@ class HttpError extends Error {
 }
 
 // --- Utilitaires ---
+
+// Verrou par workspace : lecture-modification-écriture du fichier sans entrelacement entre requêtes
+const locks = new Map<string, Promise<unknown>>();
+function withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const previous = locks.get(id) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(fn);
+  locks.set(id, next);
+  next.finally(() => {
+    if (locks.get(id) === next) locks.delete(id);
+  }).catch(() => undefined);
+  return next;
+}
 
 function run(cmd: string, args: string[], timeoutMs = 5000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -291,25 +305,28 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       const body = await readBody(req);
       if (!isRecord(body)) throw new HttpError(400, 'Objet JSON attendu');
       const id = checkId(String(body.id ?? ''));
-      await mkdir(STATE_DIR, { recursive: true, mode: 0o700 });
-      try {
-        await loadWorkspace(id);
-        throw new HttpError(409, 'Un workspace porte déjà cet identifiant');
-      } catch (err) {
-        if (!(err instanceof HttpError) || err.status !== 404) throw err;
-      }
-      const now = new Date().toISOString();
-      const ws: Workspace = {
-        id,
-        name: checkName(body.name),
-        env: checkEnv(body.env),
-        folder: await resolveFolder(body.folder, id),
-        nextPanel: 1,
-        layout: null,
-        created: now,
-        updated: now,
-      };
-      await writeJsonAtomic(stateFile(id), ws);
+      const ws = await withLock(id, async () => {
+        await mkdir(STATE_DIR, { recursive: true, mode: 0o700 });
+        try {
+          await loadWorkspace(id);
+          throw new HttpError(409, 'Un workspace porte déjà cet identifiant');
+        } catch (err) {
+          if (!(err instanceof HttpError) || err.status !== 404) throw err;
+        }
+        const now = new Date().toISOString();
+        const created: Workspace = {
+          id,
+          name: checkName(body.name),
+          env: checkEnv(body.env),
+          folder: await resolveFolder(body.folder, id),
+          nextPanel: 1,
+          layout: null,
+          created: now,
+          updated: now,
+        };
+        await writeJsonAtomic(stateFile(id), created);
+        return created;
+      });
       return send(res, 201, ws);
     }
 
@@ -319,30 +336,43 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     }
 
     case 'PUT /workspaces/:': {
-      const ws = await loadWorkspace(parts[2]);
       const body = await readBody(req);
       if (!isRecord(body)) throw new HttpError(400, 'Objet JSON attendu');
-      if ('name' in body) ws.name = checkName(body.name);
-      if ('env' in body) ws.env = checkEnv(body.env);
-      if ('layout' in body) {
-        if (body.layout !== null && !isRecord(body.layout)) throw new HttpError(400, 'Disposition invalide');
-        ws.layout = body.layout;
-      }
-      if ('nextPanel' in body) {
-        const n = Number(body.nextPanel);
-        // Le compteur ne recule jamais : un numéro déjà attribué n'est jamais réutilisé
-        if (!Number.isInteger(n) || n < 1 || n > 9999) throw new HttpError(400, 'nextPanel invalide');
-        ws.nextPanel = Math.max(ws.nextPanel, n);
-      }
-      ws.updated = new Date().toISOString();
-      await writeJsonAtomic(stateFile(ws.id), ws);
+      const ws = await withLock(checkId(parts[2]), async () => {
+        const w = await loadWorkspace(parts[2]);
+        if ('name' in body) w.name = checkName(body.name);
+        if ('env' in body) w.env = checkEnv(body.env);
+        if ('layout' in body) {
+          if (body.layout !== null && !isRecord(body.layout)) throw new HttpError(400, 'Disposition invalide');
+          // Plusieurs onglets sur le même workspace : la dernière disposition enregistrée l'emporte
+          w.layout = body.layout;
+        }
+        w.updated = new Date().toISOString();
+        await writeJsonAtomic(stateFile(w.id), w);
+        return w;
+      });
       return send(res, 200, summary(ws));
     }
 
+    case 'POST /workspaces/:/panels': {
+      const n = await withLock(checkId(parts[2]), async () => {
+        const w = await loadWorkspace(parts[2]);
+        const allocated = Math.max(1, Number(w.nextPanel) || 1);
+        if (allocated > 9999) throw new HttpError(409, 'Plus de numéro de panneau disponible');
+        w.nextPanel = allocated + 1;
+        await writeJsonAtomic(stateFile(w.id), w);
+        return allocated;
+      });
+      return send(res, 201, { n });
+    }
+
     case 'DELETE /workspaces/:': {
-      const ws = await loadWorkspace(parts[2]);
+      const ws = await withLock(checkId(parts[2]), async () => {
+        const w = await loadWorkspace(parts[2]);
+        await rm(stateFile(w.id), { force: true });
+        return w;
+      });
       for (const s of await workspaceSessions(ws.id)) await killSession(s);
-      await rm(stateFile(ws.id), { force: true });
       // Le dossier de travail n'est jamais supprimé
       return send(res, 204);
     }

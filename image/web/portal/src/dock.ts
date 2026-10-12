@@ -3,7 +3,8 @@
 //
 // Règles :
 //  - chaque panneau terminal garde son numéro (paramètre n), donc sa session tmux
-//    <workspace>_<shell>_<n> : le numéro vient d'un compteur du workspace, jamais réutilisé ;
+//    <workspace>_<shell>_<n> : le numéro est attribué par cloudbox-api, jamais réutilisé, même
+//    avec plusieurs onglets ouverts sur le même workspace ;
 //  - une session n'est fermée que sur un clic explicite sur la croix d'un onglet, jamais sur les
 //    retraits internes de Dockview (restauration, déplacement d'onglet ou de groupe) ;
 //  - aucune sauvegarde pendant la restauration d'une disposition.
@@ -125,12 +126,10 @@ export interface DockHandle {
 
 export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: string) => void): DockHandle {
   let restoring = true;
-  let nextPanel = Math.max(1, ws.nextPanel);
+  let disposed = false;
   let saveTimer = 0;
   const listeners: (() => void)[] = [];
   const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-  let dockApi: DockviewApi;
 
   const closePanel = async (parameters: TabPartInitParameters) => {
     const p = parameters.params as unknown as PanelParams;
@@ -149,7 +148,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
     panel.close();
   };
 
-  dockApi = createDockview(root, {
+  const dockApi: DockviewApi = createDockview(root, {
     theme: dark ? themeDark : themeLight,
     createComponent: () => new FramePanel(ws),
     createTabComponent: () => new ClosableTab(closePanel),
@@ -162,40 +161,47 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   const save = () => {
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
-      api.updateWorkspace(ws.id, { layout: dockApi.toJSON(), nextPanel }).catch((err: Error) => onError(err.message));
+      saveTimer = 0;
+      api.updateWorkspace(ws.id, { layout: dockApi.toJSON() }).catch((err: Error) => onError(err.message));
     }, SAVE_DELAY_MS);
   };
 
-  const add = (kind: PanelKind, position?: { referencePanel: string; direction: 'right' | 'below' }) => {
-    const params: PanelParams = kind === 'code' ? { kind } : { kind, n: nextPanel++ };
+  const add = async (kind: PanelKind, position?: { referencePanel: string; direction: 'right' | 'below' }) => {
+    const params: PanelParams = kind === 'code' ? { kind } : { kind, n: await api.allocatePanel(ws.id) };
+    if (disposed) return;
     const id = kind === 'code' ? 'code' : `${kind}-${params.n}`;
     dockApi.addPanel({ id, component: 'frame', title: panelTitle(params), params: { ...params }, position });
   };
 
-  const defaultLayout = () => {
-    add('pwsh');
+  const defaultLayout = async () => {
+    await add('pwsh');
     const first = dockApi.panels[0]?.id;
-    add('code', first ? { referencePanel: first, direction: 'right' } : undefined);
-    if (first) add('bash', { referencePanel: first, direction: 'below' });
+    await add('code', first ? { referencePanel: first, direction: 'right' } : undefined);
+    if (first) await add('bash', { referencePanel: first, direction: 'below' });
   };
 
   const notify = () => listeners.forEach((l) => l());
 
-  // Restauration : la disposition enregistrée, sinon la disposition par défaut
-  try {
-    if (ws.layout) dockApi.fromJSON(ws.layout as Parameters<DockviewApi['fromJSON']>[0]);
-    else defaultLayout();
-  } catch (err) {
-    console.warn('Disposition illisible, disposition par défaut', err);
-    dockApi.clear();
-    defaultLayout();
-  }
-  // La restauration émet des événements de disposition : on attend qu'ils soient passés
-  window.setTimeout(() => {
+  // Restauration : la disposition enregistrée, sinon la disposition par défaut.
+  // La restauration émet des événements de disposition : aucune sauvegarde avant la fin.
+  const restore = async () => {
+    let restored = false;
+    if (ws.layout) {
+      try {
+        dockApi.fromJSON(ws.layout as Parameters<DockviewApi['fromJSON']>[0]);
+        restored = true;
+      } catch (err) {
+        console.warn('Disposition illisible, disposition par défaut', err);
+        dockApi.clear();
+      }
+    }
+    if (!restored) await defaultLayout();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
     restoring = false;
-    if (!ws.layout) save();
+    if (!restored) save();
     notify();
-  }, 0);
+  };
+  restore().catch((err: Error) => onError(err.message));
 
   const subscriptions = [
     dockApi.onDidLayoutChange(() => {
@@ -205,14 +211,21 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   ];
   const removeGuard = installDragGuard(root);
 
+  // Fermeture ou rechargement de la page pendant le délai de sauvegarde : envoi immédiat
+  const onPageHide = () => {
+    if (!restoring && saveTimer) api.saveLayoutOnUnload(ws.id, dockApi.toJSON());
+  };
+  window.addEventListener('pagehide', onPageHide);
+
   return {
     addPanel(kind) {
       if (kind === 'code' && dockApi.getPanel('code')) {
         dockApi.getPanel('code')?.api.setActive();
         return;
       }
-      add(kind);
-      save();
+      add(kind)
+        .then(() => save())
+        .catch((err: Error) => onError(err.message));
     },
     hasCode: () => Boolean(dockApi.getPanel('code')),
     onChange(listener) {
@@ -220,11 +233,13 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
     },
     dispose() {
       window.clearTimeout(saveTimer);
+      window.removeEventListener('pagehide', onPageHide);
       if (!restoring) {
         // Dernière sauvegarde immédiate en quittant la vue
-        api.updateWorkspace(ws.id, { layout: dockApi.toJSON(), nextPanel }).catch(() => undefined);
+        api.updateWorkspace(ws.id, { layout: dockApi.toJSON() }).catch(() => undefined);
       }
       restoring = true;
+      disposed = true;
       subscriptions.forEach((s) => s.dispose());
       removeGuard();
       dockApi.dispose();

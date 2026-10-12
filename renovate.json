@@ -74,6 +74,14 @@
       "allowedVersions": "24.x"
     },
     {
+      "description": "dockview fournit le CSS et réexporte dockview-core : toujours à la même version, dans une seule PR",
+      "matchPackageNames": [
+        "dockview",
+        "dockview-core"
+      ],
+      "groupName": "dockview"
+    },
+    {
       "description": "L'image :web part de l'image :cli construite dans le même workflow",
       "matchDatasources": [
         "docker"

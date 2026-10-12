@@ -89,6 +89,9 @@ http://:8080 {
 		# Ressources de la page de connexion, publiques
 		handle /assets/* {
 			import strict_page
+			# Fichiers produits par Vite avec une empreinte dans le nom : jamais modifiés
+			@hashed path_regexp -[A-Za-z0-9_-]{8}\.(js|css)$
+			header @hashed Cache-Control "public, max-age=31536000, immutable"
 			root * /srv/portal
 			file_server
 		}
@@ -130,7 +133,9 @@ http://:8080 {
 		handle {
 			import strict_page
 			root * /srv/portal
-			header /versions.json Cache-Control "no-cache"
+			# Pages et versions toujours revalidées : après une mise à jour de l'image, index.html
+			# doit désigner les nouveaux fichiers JS/CSS
+			header Cache-Control "no-cache"
 			file_server
 		}
 	}

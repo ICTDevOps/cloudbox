@@ -13,7 +13,6 @@ export interface WorkspaceSummary {
 }
 
 export interface Workspace extends WorkspaceSummary {
-  nextPanel: number;
   layout: object | null;
   sessions: string[];
 }
@@ -78,8 +77,19 @@ export const api = {
   getWorkspace: (id: string) => request<Workspace>('GET', `/api/workspaces/${id}`),
   createWorkspace: (data: { id: string; name: string; env: Env; folder?: string }) =>
     request<Workspace>('POST', '/api/workspaces', data),
-  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout' | 'nextPanel'>>) =>
+  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout'>>) =>
     request<WorkspaceSummary>('PUT', `/api/workspaces/${id}`, data),
+  // Numéro de panneau terminal attribué par le serveur (jamais réutilisé, même avec plusieurs onglets)
+  allocatePanel: async (id: string) => (await request<{ n: number }>('POST', `/api/workspaces/${id}/panels`)).n,
+  // Envoi de la disposition à la fermeture de la page (keepalive : la requête survit au déchargement)
+  saveLayoutOnUnload: (id: string, layout: object) =>
+    fetch(`/api/workspaces/${id}`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout }),
+    }).catch(() => undefined),
   deleteWorkspace: (id: string) => request<void>('DELETE', `/api/workspaces/${id}`),
   closeSession: (id: string, session: string) =>
     request<void>('DELETE', `/api/workspaces/${id}/sessions/${session}`),

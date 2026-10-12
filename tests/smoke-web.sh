@@ -105,6 +105,13 @@ h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/code/?fold
 grep -qi "^x-frame-options: SAMEORIGIN" <<<"$h" && pass "X-Frame-Options: SAMEORIGIN sur /code/ (webviews)" || fail "X-Frame-Options de /code/"
 grep -qi "^content-security-policy: .*script-src 'self';" <<<"$h" && fail "CSP stricte du portail appliquée à /code/" || pass "pas de CSP stricte sur /code/"
 
+section "Cache du portail"
+h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/" | tr -d '\r')
+grep -qi '^cache-control: no-cache' <<<"$h" && pass "index.html revalidé (no-cache)" || fail "Cache-Control de /"
+asset=$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/" | grep -o '/assets/index-[A-Za-z0-9_-]*\.js' | head -n 1)
+h=$(docker exec "$NAME" curl -s -D - -o /dev/null "$BASE$asset" | tr -d '\r')
+grep -qi '^cache-control: .*immutable' <<<"$h" && pass "fichiers à empreinte immuables ($asset)" || fail "Cache-Control de $asset"
+
 section "API et workspaces"
 api() { docker exec "$NAME" curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${AUTH[@]}" "$@" | tr -d '\r'; }
 JSON=(-H 'Content-Type: application/json' -H "Origin: $BASE")
@@ -120,8 +127,13 @@ expect "POST workspace client-prd" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"cl
 expect "POST doublon" 409 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev"}' "$BASE/api/workspaces")"
 expect "dossier créé" "dev" "$(docker exec "$NAME" stat -c %U /home/dev/workspaces/client)"
 expect "liste des workspaces" "client client-prd" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces" | docker exec -i "$NAME" jq -r '[.[].id] | sort | join(" ")')"
-expect "PUT disposition" 200 "$(api -X PUT "${JSON[@]}" -d '{"layout":{"grid":{}},"nextPanel":3}' "$BASE/api/workspaces/client")"
-expect "PUT nextPanel ne recule pas" 3 "$(api -X PUT "${JSON[@]}" -d '{"nextPanel":1}' "$BASE/api/workspaces/client" >/dev/null; docker exec "$NAME" jq .nextPanel /home/dev/.cloudbox/workspaces/client.json)"
+expect "PUT disposition" 200 "$(api -X PUT "${JSON[@]}" -d '{"layout":{"grid":{}}}' "$BASE/api/workspaces/client")"
+alloc() { docker exec "$NAME" curl -s -X POST "${AUTH[@]}" "${JSON[@]}" "$BASE/api/workspaces/$1/panels" | docker exec -i "$NAME" jq -r .n; }
+expect "numéro de panneau attribué par le serveur" "1 2" "$(alloc client) $(alloc client)"
+# 8 attributions simultanées : 8 numéros distincts (verrou par workspace dans l'API)
+nums=$(docker exec "$NAME" bash -c "for i in \$(seq 8); do curl -s -X POST -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' -H 'Origin: $BASE' $BASE/api/workspaces/client/panels & done; wait" | grep -o '[0-9]\+' | sort -n | uniq | wc -l)
+expect "attributions simultanées distinctes" 8 "$nums"
+expect "compteur enregistré" 11 "$(docker exec "$NAME" jq .nextPanel /home/dev/.cloudbox/workspaces/client.json)"
 
 out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" '"cwd=" + (Get-Location) + " ws=" + $env:CLOUDBOX_WORKSPACE')
 grep -q 'cwd=/home/dev/workspaces/client ws=client' <<<"$out" && pass "panneau de workspace : dossier et variable" || fail "panneau de workspace : $(tail -c 300 <<<"$out")"
