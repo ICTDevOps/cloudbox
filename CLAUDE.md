@@ -115,10 +115,11 @@ image/web/Dockerfile   → ghcr.io/<owner>/cloudbox:web   (FROM :cli + stack web
 
 ```
 navigateur ──http://localhost:8080──▶ Caddy (reverse proxy + auth)
-                                        ├── /        → portail statique
+                                        ├── /        → portail (application statique, workspaces)
+                                        ├── /api/    → cloudbox-api (Node, socket UNIX)
                                         ├── /term/   → ttyd → tmux → pwsh | bash
                                         └── /code/   → code-server
-                       s6-overlay supervise Caddy, ttyd (x2) et code-server
+                       s6-overlay supervise Caddy, cloudbox-api, ttyd (x2) et code-server
                        /home/dev = volume persistant
 ```
 
@@ -133,8 +134,33 @@ navigateur ──http://localhost:8080──▶ Caddy (reverse proxy + auth)
 Deux entrées terminal : `/term/pwsh/` (session tmux `pwsh`) et `/term/bash/` (session tmux `bash`),
 chacune lancée par `tmux new -A -s <nom> <shell>` pour se rattacher à la session existante.
 
-Seul Caddy écoute sur le réseau du container (port 8080). ttyd et code-server écoutent sur
-`127.0.0.1` à l'intérieur du container, sans authentification propre : Caddy est la seule porte.
+### Portail et workspaces
+
+Le portail est une application statique construite au build (étape Node dans
+`image/web/Dockerfile`, rien de Node n'est ajouté à l'image finale en dehors de ce que `:cli`
+contient déjà) :
+
+| Couche | Choix |
+|---|---|
+| Langage | TypeScript |
+| Build | Vite |
+| Composants (panneaux riches : accueil, palette, assistant) | Preact |
+| Disposition en panneaux (docking) | Dockview (`dockview-core`, sans React) |
+| API | `cloudbox-api` : Node (TypeScript exécuté directement, sans dépendance), socket UNIX derrière Caddy |
+
+Dépendances npm épinglées (`package-lock.json`) et suivies par Renovate comme le reste.
+
+Un **workspace** (un client, un projet, un environnement) regroupe des panneaux PowerShell,
+Bash et VS Code dans une disposition redimensionnable, sauvegardée dans le volume
+(`/home/dev/.cloudbox/workspaces/<id>.json`). Chaque panneau terminal a sa session tmux
+(`<workspace>-<shell>[-n]`), VS Code s'ouvre sur le dossier du workspace.
+L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le contexte affiché
+(abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,
+y compris dans le prompt de chaque shell.
+
+Seul Caddy écoute sur le réseau du container (port 8080). ttyd, code-server et cloudbox-api
+écoutent sur des sockets UNIX à l'intérieur du container, sans authentification propre :
+Caddy est la seule porte.
 
 ### Init
 
@@ -162,8 +188,12 @@ Les caches de jetons MSAL sont en clair dans `/home/dev`. Règles :
    sur les WebSocket.
 4. **sudo désactivé par défaut**, activable avec `CLOUDBOX_SUDO=true`.
 5. Pas de socket Docker monté, pas de `--privileged`.
-6. En-têtes de sécurité dans Caddy (`X-Frame-Options: DENY`, `Content-Security-Policy` adaptée,
-   `Referrer-Policy: no-referrer`).
+6. En-têtes de sécurité dans Caddy (`X-Frame-Options`, `Content-Security-Policy` adaptée par
+   route, `Referrer-Policy: no-referrer`). Les panneaux du workspace sont des iframes de même
+   origine : `/term/*` et `/code/*` sont en `SAMEORIGIN` / `frame-ancestors 'self'`, le reste en `DENY`.
+7. API : écritures en JSON uniquement (`Content-Type: application/json`, donc requête
+   « non simple » bloquée en cross-origin), noms de workspace validés strictement
+   (`^[a-z0-9][a-z0-9-]{0,31}$`) avant tout usage dans une commande ou un chemin.
 
 ## Authentification vers Azure / M365
 
@@ -197,7 +227,8 @@ image/cli/rootfs/usr/local/bin/        # cloudbox-versions
 image/web/Dockerfile
 image/web/rootfs/etc/s6-overlay/s6-rc.d/   # caddy, ttyd-pwsh, ttyd-bash, code-server, cloudbox-init
 image/web/rootfs/etc/caddy/Caddyfile
-image/web/rootfs/srv/portal/           # portail statique (HTML/CSS, sans framework)
+image/web/portal/                      # portail : TypeScript + Vite + Preact + Dockview
+image/web/api/                         # cloudbox-api (Node, TypeScript sans dépendance)
 compose.yaml
 config/cloudbox.psd1
 scripts/*.ps1
@@ -234,15 +265,37 @@ README.md
 - Le test de fumée CI vérifie : `cloudbox-versions`, import des modules PowerShell en `dev`,
   réponse HTTP 401 puis 200 (avec jeton) de Caddy sur `/`, `/term/pwsh/`, `/code/`.
 
-### Étape 2 — Confort et durcissement
+### Étape 2 — Workspaces (en cours)
 
-Scripts PowerShell côté poste, module `Cloudbox.Connect`, upload/download de fichiers depuis le
-portail, état des connexions (az / Graph / EXO) dans le portail.
+1. Portail reconstruit (TypeScript + Vite + Preact + Dockview) et `cloudbox-api`.
+2. Workspaces : création (nom, environnement DEV / ACC / PRD, dossier), disposition en panneaux
+   PowerShell / Bash / VS Code redimensionnables, sauvegardée dans le volume, retrouvée à la
+   connexion suivante ; une session tmux par panneau.
+3. Contexte réel (abonnement Azure, cluster Kubernetes) dans l'en-tête et dans le prompt des
+   shells ; environnement PRD très visible.
+
+### Étape 3 — Isolation des identités et garde-fous
+
+Isolation par workspace : `AZURE_CONFIG_DIR` (az, azd), `KUBECONFIG`, `GH_CONFIG_DIR` ; modules
+PowerShell (Az, Graph, EXO, Teams, PnP) seulement là où c'est vérifié module par module.
+Confirmation des opérations destructrices dans un workspace PRD (aide, pas une garantie).
+
+### Étape 4 — Productivité
+
+Palette de commandes, bibliothèque de commandes (insertion dans le terminal actif), état des
+connexions (az / Graph / EXO), upload/download de fichiers.
+
+### Plus tard, en option
+
+- Assistant IA (panneau Dockview) : désactivé par défaut, clé API côté `cloudbox-api` uniquement,
+  masquage des secrets avant envoi, insertion de commande seulement après validation explicite.
+- Scripts PowerShell côté poste, module `Cloudbox.Connect`.
 
 ### Hors périmètre pour l'instant
 
 Hébergement central, multi-utilisateur, Azure Container Apps, oauth2-proxy / Entra ID en frontal,
-Managed Identity. Ne pas les implémenter sans demande explicite.
+Managed Identity. Ne pas les implémenter sans demande explicite. Sans serveur central,
+l'isolation par workspace suffit : pas d'authentification Entra ID devant `localhost`.
 
 ## Conventions
 
