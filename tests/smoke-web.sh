@@ -38,6 +38,8 @@ for p in / /index.html /versions.json /term/pwsh/ /term/bash/ /code/; do
     expect "GET $p" 401 "$(http "$BASE$p")"
 done
 expect "WebSocket /term/pwsh/ws" "HTTP 401" "$(probe "$BASE/term/pwsh/ws" - "$BASE" | head -n 1)"
+expect "WebSocket /term/bash/ws" "HTTP 401" "$(probe "$BASE/term/bash/ws" - "$BASE" | head -n 1)"
+expect "WebSocket /code/" "HTTP 401" "$(probe "$BASE/code/?reconnectionToken=x&skipWebSocketFrames=false" - "$BASE" | head -n 1)"
 expect "page de connexion servie en 401" 1 "$(docker exec "$NAME" curl -s "$BASE/code/" | grep -c 'id="login-form"')"
 
 section "Jetons invalides : 401"

@@ -35,7 +35,7 @@ docker compose logs cloudbox | grep "Jeton"     # jeton généré au premier dé
 Ouvrez http://localhost:8080 et collez le jeton. Il est conservé dans le volume
 (`~/.cloudbox/token`) et reste le même d'un redémarrage à l'autre.
 
-Variables (fichier `.env` à côté de `compose.yaml`, ignoré par git) :
+Variables (fichier `.env` à côté de `compose.yaml`, ignoré par git ; modèle : `.env.example`) :
 
 | Variable | Défaut | Rôle |
 |---|---|---|
