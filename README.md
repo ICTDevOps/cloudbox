@@ -4,16 +4,17 @@ Un **Cloud Shell local pour Azure et Microsoft 365** : un container Docker qui t
 PC et s'utilise depuis le navigateur, avec un terminal web (PowerShell et Bash), VS Code web et
 tous les outils d'administration Azure / M365 à jour.
 
-> **Statut : étape 1 (PoC local).** Les images `:cli` et `:web` se construisent et passent leur
-> test de fumée. Les scripts PowerShell côté poste (`Install-Cloudbox.ps1`…) viendront à
-> l'étape 2. Le cadrage technique est dans [`CLAUDE.md`](CLAUDE.md).
+> **Statut : étape 2 (workspaces).** Les images `:cli` et `:web` se construisent et passent leurs
+> tests (HTTP et navigateur). Le cadrage technique et la feuille de route sont dans
+> [`CLAUDE.md`](CLAUDE.md).
 
 ## Principe
 
 ```
 navigateur ──http://localhost:8080──▶ container cloudbox
                                         Caddy (jeton, contrôle Host/Origin)
-                                        ├── /           portail
+                                        ├── /           portail et workspaces
+                                        ├── /api/       cloudbox-api (workspaces, contexte)
                                         ├── /term/pwsh/ terminal PowerShell (ttyd + tmux)
                                         ├── /term/bash/ terminal Bash (ttyd + tmux)
                                         └── /code/      VS Code web (code-server)
@@ -62,8 +63,33 @@ docker build -t cloudbox:cli -f image/cli/Dockerfile image/cli
 docker build -t cloudbox:web -f image/web/Dockerfile --build-arg BASE_IMAGE=cloudbox:cli .
 tests/smoke-cli.sh cloudbox:cli
 tests/smoke-web.sh cloudbox:web
+tests/smoke-browser.sh cloudbox:web     # Chromium headless (Playwright), captures dans tests/browser-out/
 CLOUDBOX_IMAGE=cloudbox:web docker compose up -d
 ```
+
+## Workspaces
+
+Un workspace regroupe, pour un client, un projet ou un environnement, des terminaux PowerShell et
+Bash et VS Code dans une disposition en panneaux (redimensionnables, déplaçables par glisser-déposer).
+
+- Création depuis l'accueil : nom, identifiant, environnement **DEV / ACC / PRD**, dossier de
+  travail (par défaut `/home/dev/workspaces/<identifiant>`).
+- La disposition est enregistrée automatiquement dans le volume
+  (`~/.cloudbox/workspaces/<identifiant>.json`) et retrouvée à la connexion suivante.
+- Chaque panneau terminal a sa session tmux, `<identifiant>_<shell>_<n>` : recharger la page,
+  fermer l'onglet du navigateur ou déplacer un panneau ne l'arrête pas. Seule la croix d'un
+  onglet (avec confirmation) ferme la session. Supprimer un workspace ferme ses sessions mais
+  **conserve son dossier**.
+- Un workspace PRD est encadré de rouge, et le prompt de ses shells porte un badge
+  `PRD <identifiant>`.
+- Le contexte affiché (abonnement az CLI, contexte Az PowerShell, cluster Kubernetes) est lu dans
+  les fichiers de configuration réels, jamais déclaré. Le prompt des shells affiche aussi
+  l'abonnement az CLI (`az:`) et, en PowerShell, le contexte Az (`AzPS:`) dès que le module
+  `Az.Accounts` est chargé : ce sont deux contextes distincts.
+
+> **Limite actuelle :** les connexions (az, Az PowerShell, kubectl…) sont encore **communes à
+> tous les workspaces**, ce que le portail signale (« partagé entre workspaces »). L'isolation des
+> identités par workspace est l'étape 3 de la feuille de route.
 
 ## Connexion aux services (device code)
 
@@ -89,7 +115,7 @@ Les caches de jetons sont dans `/home/dev` (volume) : ils survivent à la recré
 | Kubernetes | kubectl, helm, kubelogin, k9s, kubectx / kubens |
 | IaC | OpenTofu, Terraform |
 | Outils | gh, git, jq, yq, openssl, tmux, fzf, ripgrep, bat, outils réseau… |
-| Interface web | Caddy, ttyd + tmux, code-server, s6-overlay |
+| Interface web | Caddy, ttyd + tmux, code-server, s6-overlay ; portail TypeScript + Vite + Preact + Dockview |
 
 `cloudbox-versions` affiche les versions installées ; le portail et chaque release GitHub
 (`versions.json`) reprennent cette liste.
