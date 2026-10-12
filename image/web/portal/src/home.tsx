@@ -2,21 +2,14 @@
 import { useEffect, useState } from 'preact/hooks';
 import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type ToolVersion, type WorkspaceSummary } from './api';
 import { ContextBar } from './context';
+import { useWorkspaces, workspaceStore } from './store';
 
 export function EnvBadge({ env, large = false }: { env: Env; large?: boolean }) {
   return <span class={`env-badge env-${env}${large ? ' env-large' : ''}`}>{ENV_LABELS[env]}</span>;
 }
 
 export function TopBar({ children }: { children?: preact.ComponentChildren }) {
-  return (
-    <header class="topbar">
-      <a class="brand" href="#/">
-        <img src="/assets/favicon.svg" alt="" width="26" height="26" /> Cloudbox
-      </a>
-      {children}
-      <a class="logout" href="/_auth/logout">Se déconnecter</a>
-    </header>
-  );
+  return <header class="topbar">{children}</header>;
 }
 
 function WorkspaceCard({ ws, onDeleted }: { ws: WorkspaceSummary; onDeleted: () => void }) {
@@ -51,7 +44,7 @@ function WorkspaceCard({ ws, onDeleted }: { ws: WorkspaceSummary; onDeleted: () 
   );
 }
 
-function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void }) {
+export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void }) {
   const [name, setName] = useState('');
   const [id, setId] = useState('');
   const [idTouched, setIdTouched] = useState(false);
@@ -173,17 +166,13 @@ function Versions() {
 }
 
 export function Home() {
-  const [list, setList] = useState<WorkspaceSummary[] | null>(null);
-  const [error, setError] = useState('');
-  const reload = () =>
-    api.listWorkspaces().then(setList).catch((err: Error) => setError(err.message));
-  useEffect(() => {
-    reload();
-  }, []);
+  const { list, error } = useWorkspaces();
+  const reload = () => workspaceStore.reload();
 
   return (
     <div class="page">
       <TopBar>
+        <h1 class="page-title">Accueil</h1>
         <ContextBar />
       </TopBar>
       <main class="home">
@@ -198,7 +187,7 @@ export function Home() {
                 environnement, et retrouve sa disposition à chaque connexion.
               </p>
             )}
-            <CreateWorkspace onCreated={(id) => { window.location.hash = `#/w/${id}`; }} />
+            <CreateWorkspace onCreated={(id) => { reload(); window.location.hash = `#/w/${id}`; }} />
           </div>
         </section>
 

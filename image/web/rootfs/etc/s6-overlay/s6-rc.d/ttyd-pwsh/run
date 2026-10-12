@@ -12,4 +12,5 @@ exec ttyd --interface "$socket" --base-path /term/pwsh --writable --check-origin
     --client-option titleFixed=PowerShell \
     --client-option fontSize=14 \
     --client-option disableLeaveAlert=true \
+    --client-option disableResizeOverlay=true \
     /usr/local/bin/cloudbox-term pwsh

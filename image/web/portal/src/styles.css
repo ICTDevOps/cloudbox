@@ -83,9 +83,89 @@ h2 { font-size: 1.05rem; }
 .button.ghost { background: transparent; color: var(--muted); }
 .button:focus-visible, .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Mise en page */
+/* Mise en page : barre latérale + zone principale */
 #app, .page { height: 100%; }
 .page { display: flex; flex-direction: column; }
+.shell { display: flex; height: 100%; }
+.shell-main { flex: 1; min-width: 0; position: relative; }
+/* Accueil et workspaces gardés ouverts sont superposés ; seule la vue active est visible.
+   visibility (et non display: none) : Dockview garde ses tailles, les iframes restent connectées. */
+.home-view, .ws-view { position: absolute; inset: 0; overflow: auto; }
+.ws-view { overflow: hidden; visibility: hidden; pointer-events: none; }
+.ws-view.active { visibility: visible; pointer-events: auto; z-index: 1; }
+.page-title { font-size: 1.1rem; }
+
+/* Barre latérale */
+.sidebar {
+  flex: none; width: 250px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0.6rem 0.5rem;
+  background: var(--surface); border-right: 1px solid var(--border);
+  overflow-y: auto; overflow-x: hidden;
+  transition: width 0.15s;
+}
+.sidebar.collapsed { width: 58px; }
+.sidebar.collapsed .label { display: none; }
+.sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; padding: 0 0.25rem 0.6rem; }
+.sidebar.collapsed .sidebar-head { flex-direction: column; }
+.sidebar .brand { font-size: 1.1rem; }
+.sidebar-toggle {
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  border-radius: 6px; width: 1.8rem; height: 1.8rem; cursor: pointer; font-size: 0.9rem;
+}
+.sidebar-toggle:hover { color: var(--text); border-color: var(--accent); }
+.nav-section {
+  margin: 0.9rem 0.5rem 0.3rem; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.sidebar.collapsed .nav-section { margin: 0.6rem 0.3rem; border-top: 1px solid var(--border); }
+.nav-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  position: relative;
+  display: flex; align-items: center; gap: 0.6rem;
+  width: 100%; min-height: 2.3rem; padding: 0.3rem 0.5rem;
+  border: none; border-radius: 6px; background: transparent;
+  color: var(--text); text-decoration: none; font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer;
+}
+.nav-item:hover { background: var(--surface-2); }
+.nav-item.active { background: color-mix(in srgb, var(--accent) 16%, transparent); font-weight: 600; }
+.nav-item.active::before {
+  content: ""; position: absolute; left: -0.5rem; top: 0.35rem; bottom: 0.35rem;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
+}
+.nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.nav-icon { flex: none; width: 1.75rem; text-align: center; font-size: 1.05rem; color: var(--muted); }
+.nav-avatar {
+  flex: none; display: grid; place-items: center;
+  width: 1.75rem; height: 1.75rem; border-radius: 6px;
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.02em;
+}
+.nav-avatar.env-dev { background: var(--dev); color: var(--dev-text); }
+.nav-avatar.env-acc { background: var(--acc); color: var(--acc-text); }
+.nav-avatar.env-prd { background: var(--prd); color: var(--prd-text); }
+.nav-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item .env-badge { font-size: 0.65rem; padding: 0.05rem 0.35rem; }
+.alive-dot {
+  position: absolute; left: 1.85rem; top: 0.3rem;
+  width: 0.5rem; height: 0.5rem; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface);
+}
+.nav-new { color: var(--accent); margin-top: 0.25rem; }
+.nav-new .nav-icon { color: var(--accent); font-weight: 700; }
+.nav-empty { padding: 0.3rem 0.75rem; color: var(--muted); font-size: 0.85rem; }
+.sidebar-foot { margin-top: auto; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+
+/* Fenêtre de création */
+.create-dialog {
+  width: min(92vw, 440px); padding: 0; border: none; border-radius: 12px;
+  background: transparent; color: var(--text);
+}
+.create-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.create-dialog .create-ws { box-shadow: 0 12px 40px rgb(0 0 0 / 0.3); }
+.dialog-close {
+  position: absolute; top: 0.6rem; right: 0.7rem;
+  border: none; background: transparent; color: var(--muted); font-size: 1.4rem; cursor: pointer;
+}
 .topbar {
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
   padding: 0.6rem 1.25rem;
@@ -96,7 +176,6 @@ h2 { font-size: 1.05rem; }
   display: flex; align-items: center; gap: 0.5rem;
   font-size: 1.2rem; font-weight: 600; color: var(--text); text-decoration: none;
 }
-.logout { margin-left: auto; font-size: 0.9rem; }
 .home { width: 100%; max-width: 1200px; margin: 0 auto; padding: 1.25rem; overflow: auto; }
 .home > section { margin-bottom: 1.75rem; }
 .section-title { margin-bottom: 0.75rem; font-size: 1.15rem; }

@@ -5,3 +5,41 @@ document.addEventListener('contextmenu', function (event) {
   if (!event.shiftKey) event.preventDefault();
 }, true);
 </script>
+<script>
+// Cloudbox : reconnexion automatique après une coupure du serveur (redémarrage ou mise à jour du
+// container). Quand ttyd affiche « Press ⏎ to Reconnect », on interroge le serveur toutes les 2 s ;
+// la page se recharge seulement s'il a été injoignable puis répond de nouveau. Après un « exit »
+// normal (serveur toujours joignable), le comportement de ttyd est conservé : Entrée pour relancer.
+(function () {
+  var PROMPT = 'Press ⏎ to Reconnect';
+  var polling = false;
+  var settled = false;
+  // L'invite de ttyd est un div ajouté dans l'élément .xterm (le texte figure aussi dans le code
+  // de la page : on ne regarde que cet élément)
+  function promptVisible() {
+    var nodes = document.querySelectorAll('.xterm > div');
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].textContent === PROMPT) return true;
+    }
+    return false;
+  }
+  function poll() {
+    polling = true;
+    var sawFailure = false;
+    var url = location.pathname.replace(/\/?$/, '/') + 'token';
+    var timer = setInterval(function () {
+      fetch(url, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) {
+        if (!r.ok && r.status !== 401) { sawFailure = true; return; }
+        clearInterval(timer);
+        polling = false;
+        if (sawFailure) location.reload();
+        else settled = true;
+      }).catch(function () { sawFailure = true; });
+    }, 2000);
+  }
+  new MutationObserver(function () {
+    if (!promptVisible()) { settled = false; return; }
+    if (!polling && !settled) poll();
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+})();
+</script>

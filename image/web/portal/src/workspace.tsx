@@ -1,4 +1,6 @@
 // Vue d'un workspace : barre (environnement, contexte réel, ajout de panneaux) et disposition Dockview.
+// Une vue reste montée quand on passe à un autre workspace (masquée, pas détruite) : terminaux et
+// VS Code ne se rechargent pas au retour.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type Workspace } from './api';
 import { ContextBar } from './context';
@@ -18,7 +20,7 @@ function Dock({ ws, onReady, onError }: { ws: Workspace; onReady: (h: DockHandle
   return <div class="dock" ref={ref} />;
 }
 
-export function WorkspaceView({ id }: { id: string }) {
+export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   const [ws, setWs] = useState<Workspace | null>(null);
   const [error, setError] = useState('');
   const [dock, setDock] = useState<DockHandle | null>(null);
@@ -35,16 +37,14 @@ export function WorkspaceView({ id }: { id: string }) {
   }, [dock]);
 
   useEffect(() => {
-    if (ws) document.title = `${ws.name} — Cloudbox`;
-    return () => {
-      document.title = 'Cloudbox';
-    };
-  }, [ws]);
+    if (ws && active) document.title = `${ws.name} — Cloudbox`;
+  }, [ws, active]);
+
+  const viewClass = `ws-view${active ? ' active' : ''}`;
 
   if (error && !ws) {
     return (
-      <div class="page">
-        <TopBar />
+      <div class={`${viewClass} page`}>
         <main class="home">
           <p class="error">{error}</p>
           <a class="button" href="#/">Retour à l'accueil</a>
@@ -52,10 +52,10 @@ export function WorkspaceView({ id }: { id: string }) {
       </div>
     );
   }
-  if (!ws) return <div class="page"><TopBar /><main class="home"><p class="muted">Chargement…</p></main></div>;
+  if (!ws) return <div class={`${viewClass} page`}><main class="home"><p class="muted">Chargement…</p></main></div>;
 
   return (
-    <div class={`page workspace env-frame-${ws.env}`}>
+    <div class={`${viewClass} page workspace env-frame-${ws.env}`} aria-hidden={!active}>
       <TopBar>
         <div class="ws-title">
           <EnvBadge env={ws.env} large />

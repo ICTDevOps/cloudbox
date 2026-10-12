@@ -54,7 +54,9 @@ du terminal web s'y rattachent avec `tmux attach -t pwsh` ou `tmux attach -t bas
 
 Dans le terminal web, la souris pilote tmux : clic droit pour le menu des panneaux (scinder,
 fermer…), molette pour l'historique. Maj + sélection copie du texte, Maj + clic droit ouvre le
-menu du navigateur.
+menu du navigateur. Après un redémarrage ou une mise à jour du container, les terminaux ouverts
+se reconnectent seuls dès que le serveur répond (la session tmux est retrouvée si le container
+n'a pas été recréé).
 
 ### Construire les images localement
 
@@ -72,8 +74,11 @@ CLOUDBOX_IMAGE=cloudbox:web docker compose up -d
 Un workspace regroupe, pour un client, un projet ou un environnement, des terminaux PowerShell et
 Bash et VS Code dans une disposition en panneaux (redimensionnables, déplaçables par glisser-déposer).
 
-- Création depuis l'accueil : nom, identifiant, environnement **DEV / ACC / PRD**, dossier de
-  travail (par défaut `/home/dev/workspaces/<identifiant>`).
+- Une barre latérale, toujours visible, liste les workspaces (couleur de l'environnement) et
+  permet d'en créer un nouveau : nom, identifiant, environnement **DEV / ACC / PRD**, dossier de
+  travail (par défaut `/home/dev/workspaces/<identifiant>`). Elle se replie en colonne d'icônes.
+- Passer d'un workspace à l'autre ne recharge rien : les quatre derniers ouverts restent chargés
+  (terminaux et VS Code), signalés par un point bleu dans la barre.
 - La disposition est enregistrée automatiquement dans le volume
   (`~/.cloudbox/workspaces/<identifiant>.json`) et retrouvée à la connexion suivante.
 - Chaque panneau terminal a sa session tmux, `<identifiant>_<shell>_<n>` : recharger la page,
