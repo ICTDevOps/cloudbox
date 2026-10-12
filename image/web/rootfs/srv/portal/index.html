@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Cloudbox</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/portal.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1><img src="/assets/favicon.svg" alt="" width="28" height="28"> Cloudbox</h1>
+    <span class="subtitle">Poste d'administration Azure / Microsoft 365</span>
+    <a class="logout" href="/_auth/logout">Se déconnecter</a>
+  </header>
+
+  <main>
+    <section class="tiles" aria-label="Outils">
+      <a class="tile" href="/term/pwsh/" target="_blank" rel="noopener">
+        <span class="tile-icon pwsh" aria-hidden="true">&gt;_</span>
+        <span class="tile-title">PowerShell</span>
+        <span class="tile-text">PowerShell 7, modules Az, Graph, Exchange, Teams, PnP. Session persistante (tmux).</span>
+      </a>
+      <a class="tile" href="/term/bash/" target="_blank" rel="noopener">
+        <span class="tile-icon bash" aria-hidden="true">$_</span>
+        <span class="tile-title">Bash</span>
+        <span class="tile-text">az, azd, kubectl, helm, tofu, terraform, gh… avec complétion. Session persistante (tmux).</span>
+      </a>
+      <a class="tile" href="/code/" target="_blank" rel="noopener">
+        <span class="tile-icon code" aria-hidden="true">{ }</span>
+        <span class="tile-title">VS Code</span>
+        <span class="tile-text">code-server sur /home/dev, extensions PowerShell, Terraform, OpenTofu, YAML, Kubernetes.</span>
+      </a>
+    </section>
+
+    <div class="columns">
+      <section class="card" aria-labelledby="cheatsheet-title">
+        <h2 id="cheatsheet-title">Se connecter (device code)</h2>
+        <p class="muted">Les jetons sont conservés dans le volume <code>/home/dev</code> : ils survivent à la recréation du container.</p>
+        <dl class="cheatsheet">
+          <dt>Azure CLI</dt>
+          <dd><code>az login --use-device-code</code></dd>
+          <dt>Azure Developer CLI</dt>
+          <dd><code>azd auth login --use-device-code</code></dd>
+          <dt>Az PowerShell</dt>
+          <dd><code>Connect-AzAccount -UseDeviceAuthentication</code></dd>
+          <dt>Microsoft Graph</dt>
+          <dd><code>Connect-MgGraph -UseDeviceCode -Scopes "User.Read.All"</code></dd>
+          <dt>Exchange Online</dt>
+          <dd><code>Connect-ExchangeOnline -Device</code></dd>
+          <dt>Microsoft Teams</dt>
+          <dd><code>Connect-MicrosoftTeams -UseDeviceAuthentication</code></dd>
+          <dt>PnP PowerShell</dt>
+          <dd><code>Connect-PnPOnline -Url https://&lt;tenant&gt;.sharepoint.com -DeviceLogin -ClientId &lt;app-id&gt;</code></dd>
+          <dt>CLI for Microsoft 365</dt>
+          <dd><code>m365 login --authType deviceCode</code></dd>
+          <dt>GitHub CLI</dt>
+          <dd><code>gh auth login</code></dd>
+          <dt>AKS (Entra ID)</dt>
+          <dd><code>az aks get-credentials -g &lt;rg&gt; -n &lt;cluster&gt; &amp;&amp; kubelogin convert-kubeconfig -l azurecli</code></dd>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="versions-title">
+        <h2 id="versions-title">Versions des outils</h2>
+        <p id="versions-meta" class="muted">Chargement…</p>
+        <table id="versions" class="versions">
+          <thead><tr><th scope="col">Outil</th><th scope="col">Commande</th><th scope="col">Version</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    Terminal classique : <code>docker exec -it cloudbox pwsh</code> ou <code>docker exec -it cloudbox bash</code>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,168 @@
+/* Cloudbox — portail (sans framework). Thème clair / sombre selon le système. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --text: #1b1f24;
+  --muted: #5b6470;
+  --border: #dde1e6;
+  --accent: #0f6cbd;
+  --accent-text: #ffffff;
+  --code-bg: #eef1f4;
+  --error: #c42b1c;
+  --pwsh: #2b5797;
+  --bash: #2f7d32;
+  --code: #6a3fb5;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181c;
+    --surface: #1e2227;
+    --text: #e6e8eb;
+    --muted: #9aa3ad;
+    --border: #30363d;
+    --accent: #4ea1f3;
+    --accent-text: #0b1520;
+    --code-bg: #272c33;
+    --error: #ff7b72;
+    --pwsh: #5b8fd6;
+    --bash: #5fb865;
+    --code: #a07ce0;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font: 15px/1.5 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+code {
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, "DejaVu Sans Mono", monospace;
+  font-size: 0.9em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+a { color: var(--accent); }
+h1, h2 { margin: 0; font-weight: 600; }
+h1 { display: flex; align-items: center; gap: 0.5rem; font-size: 1.35rem; }
+h2 { font-size: 1.05rem; margin-bottom: 0.5rem; }
+.muted { color: var(--muted); margin-top: 0; }
+.error { color: var(--error); }
+
+/* En-tête */
+.topbar {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: 0.9rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.subtitle { color: var(--muted); }
+.logout { margin-left: auto; }
+
+main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+/* Tuiles */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto 1fr;
+  column-gap: 0.9rem;
+  padding: 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.tile:hover, .tile:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile-icon {
+  grid-row: 1 / 3;
+  display: grid; place-items: center;
+  width: 3rem; height: 3rem;
+  border-radius: 8px;
+  color: #fff;
+  font: 600 1.05rem "Cascadia Mono", Consolas, monospace;
+}
+.tile-icon.pwsh { background: var(--pwsh); }
+.tile-icon.bash { background: var(--bash); }
+.tile-icon.code { background: var(--code); }
+.tile-title { font-weight: 600; font-size: 1.1rem; }
+.tile-text { color: var(--muted); font-size: 0.9rem; }
+
+/* Cartes */
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  min-width: 0;
+}
+
+/* Aide-mémoire */
+.cheatsheet { margin: 0; }
+.cheatsheet dt { font-weight: 600; margin-top: 0.7rem; }
+.cheatsheet dd { margin: 0.2rem 0 0; display: flex; gap: 0.5rem; align-items: flex-start; }
+.cheatsheet dd code { flex: 1; padding: 0.35em 0.5em; }
+.copy {
+  flex: none;
+  font: inherit; font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  background: transparent; color: var(--accent);
+  border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer;
+}
+.copy:hover { border-color: var(--accent); }
+
+/* Versions */
+.versions { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.versions th, .versions td { text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--border); }
+.versions th { color: var(--muted); font-weight: 600; }
+.versions tr.category td { font-weight: 600; padding-top: 0.8rem; color: var(--accent); border-bottom: none; }
+.versions td:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+footer { text-align: center; color: var(--muted); padding: 1rem 1.5rem 2rem; font-size: 0.9rem; }
+
+/* Connexion */
+body.login { display: grid; place-items: center; min-height: 100vh; padding: 1rem; }
+.login-card {
+  width: min(100%, 420px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.75rem;
+}
+.login-card h1 { margin-bottom: 0.75rem; }
+.login-card form { display: grid; gap: 0.5rem; margin: 1rem 0; }
+.login-card label { font-weight: 600; }
+.login-card input {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+.login-card input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.login-card button {
+  font: inherit; font-weight: 600;
+  padding: 0.6rem;
+  background: var(--accent); color: var(--accent-text);
+  border: none; border-radius: 6px; cursor: pointer;
+}
+.hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 0; }
