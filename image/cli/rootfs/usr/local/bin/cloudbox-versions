@@ -82,7 +82,10 @@ add "Outils" "tmux" tmux tmux -V
 
 add_optional "Interface web" "Caddy" caddy caddy version
 add_optional "Interface web" "ttyd" ttyd ttyd --version
-add_optional "Interface web" "code-server" code-server code-server --version
+# Au premier lancement, code-server journalise sur stdout la création de son config.yaml avant sa version
+if command -v code-server >/dev/null 2>&1; then
+    add "Interface web" "code-server" code-server bash -c "code-server --version 2>/dev/null | grep -m 1 -E '^[0-9]+\\.'"
+fi
 if [[ -r /etc/cloudbox/s6-overlay.version ]]; then
     rows+=("Interface web|s6-overlay|/init|$(cat /etc/cloudbox/s6-overlay.version)")
 fi

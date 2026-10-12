@@ -56,6 +56,7 @@ cat > "$machine/settings.json" <<JSON
     "telemetry.telemetryLevel": "off",
     "redhat.telemetry.enabled": false,
     "update.mode": "none",
-    "workbench.startupEditor": "none"
+    "workbench.startupEditor": "none",
+    "chat.disableAIFeatures": true
 }
 JSON

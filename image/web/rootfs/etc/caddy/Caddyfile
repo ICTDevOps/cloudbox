@@ -19,14 +19,22 @@
 	}
 }
 
-http://:8080 {
-	# --- En-têtes de sécurité (ajustés plus bas pour le terminal et VS Code) ---
+# En-têtes des pages Cloudbox (portail, connexion) : CSP stricte, sans script ni style inline
+(strict_page) {
 	header {
 		X-Frame-Options "DENY"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+	}
+}
+
+http://:8080 {
+	# --- En-têtes de sécurité communs ---
+	# Ce bloc contient une suppression (-Server) : Caddy l'applique à l'écriture de la réponse, après
+	# les routes. CSP et X-Frame-Options n'y figurent donc pas, sinon ils écraseraient ceux de chaque route.
+	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "no-referrer"
 		Cross-Origin-Opener-Policy "same-origin"
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 		-Server
 	}
 
@@ -80,6 +88,7 @@ http://:8080 {
 
 		# Ressources de la page de connexion, publiques
 		handle /assets/* {
+			import strict_page
 			root * /srv/portal
 			file_server
 		}
@@ -94,10 +103,12 @@ http://:8080 {
 		# Terminal web : la page de ttyd embarque son JavaScript et ses styles
 		handle /term/pwsh/* {
 			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+			header X-Frame-Options "DENY"
 			reverse_proxy unix//run/cloudbox/ttyd-pwsh.sock
 		}
 		handle /term/bash/* {
 			header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+			header X-Frame-Options "DENY"
 			reverse_proxy unix//run/cloudbox/ttyd-bash.sock
 		}
 
@@ -110,6 +121,7 @@ http://:8080 {
 
 		# Portail
 		handle {
+			import strict_page
 			root * /srv/portal
 			header /versions.json Cache-Control "no-cache"
 			file_server
@@ -118,13 +130,8 @@ http://:8080 {
 
 	# Sans session : la page de connexion, avec le code 401
 	handle_errors 401 {
-		header {
-			X-Frame-Options "DENY"
-			X-Content-Type-Options "nosniff"
-			Referrer-Policy "no-referrer"
-			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-			Cache-Control "no-store"
-		}
+		import strict_page
+		header Cache-Control "no-store"
 		root * /srv/portal
 		rewrite * /login.html
 		file_server

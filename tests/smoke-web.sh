@@ -65,6 +65,12 @@ expect "GET /code (sans slash, query conservée)" "/code/?folder=/home/dev" \
     "$(docker exec "$NAME" curl -s -o /dev/null -w '%{redirect_url}' "${AUTH[@]}" "$BASE/code?folder=/home/dev" | sed 's#^http://[^/]*##')"
 expect "WebSocket /term/pwsh/ws" "HTTP 101" "$(probe "$BASE/term/pwsh/ws" "$TOKEN" "$BASE" | head -n 1)"
 
+versions=$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/versions.json")
+expect "versions.json : version de code-server" \
+    "$(docker exec "$NAME" code-server --version 2>/dev/null | awk 'NR == 1 { print $1 }')" \
+    "$(docker exec -i "$NAME" jq -r '.tools[] | select(.name == "code-server") | .version' <<<"$versions")"
+expect "versions.json : aucun outil sans version" 0 "$(docker exec -i "$NAME" jq '[.tools[] | select(.version == "")] | length' <<<"$versions")"
+
 section "Connexion par cookie de session"
 headers=$(docker exec "$NAME" curl -s -D - -o /dev/null -X POST -H "Origin: $BASE" "${AUTH[@]}" "$BASE/_auth/login" | tr -d '\r')
 expect "POST /_auth/login" 204 "$(awk 'NR == 1 { print $2 }' <<<"$headers")"
@@ -87,7 +93,14 @@ section "En-têtes de sécurité"
 h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/" | tr -d '\r')
 grep -qi '^x-frame-options: DENY' <<<"$h" && pass "X-Frame-Options: DENY" || fail "X-Frame-Options"
 grep -qi '^referrer-policy: no-referrer' <<<"$h" && pass "Referrer-Policy: no-referrer" || fail "Referrer-Policy"
-grep -qi "^content-security-policy: default-src 'self'" <<<"$h" && pass "Content-Security-Policy" || fail "Content-Security-Policy"
+grep -qi "^content-security-policy: default-src 'self'; script-src 'self';" <<<"$h" && pass "Content-Security-Policy stricte sur le portail" || fail "Content-Security-Policy du portail"
+# ttyd et code-server embarquent du JavaScript inline : la CSP stricte du portail ne doit pas s'y appliquer
+h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/term/pwsh/" | tr -d '\r')
+expect "une seule CSP sur /term/pwsh/" 1 "$(grep -ci '^content-security-policy:' <<<"$h")"
+grep -qi "^content-security-policy:.*script-src 'self' 'unsafe-inline'" <<<"$h" && pass "CSP du terminal (scripts inline de ttyd)" || fail "CSP du terminal"
+h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/code/?folder=/home/dev" | tr -d '\r')
+grep -qi "^x-frame-options: SAMEORIGIN" <<<"$h" && pass "X-Frame-Options: SAMEORIGIN sur /code/ (webviews)" || fail "X-Frame-Options de /code/"
+grep -qi "^content-security-policy: .*script-src 'self';" <<<"$h" && fail "CSP stricte du portail appliquée à /code/" || pass "pas de CSP stricte sur /code/"
 
 section "Terminal web et session tmux"
 out=$(probe "$BASE/term/pwsh/ws" "$TOKEN" "$BASE" '$cloudboxProbe = "persistant-42"; "PS=" + $PSVersionTable.PSVersion.Major')
