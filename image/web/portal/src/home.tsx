@@ -1,6 +1,7 @@
 // Accueil : workspaces, création, accès rapide, aide (connexions et versions).
 import { useEffect, useState } from 'preact/hooks';
 import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type ToolVersion, type WorkspaceSummary } from './api';
+import { connectionCommands, CopyButton } from './connections';
 import { ContextBar } from './context';
 import { useWorkspaces, workspaceStore } from './store';
 
@@ -104,33 +105,6 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
   );
 }
 
-const CHEATSHEET: [string, string][] = [
-  ['Azure CLI', 'az login --use-device-code'],
-  ['Azure Developer CLI', 'azd auth login --use-device-code'],
-  ['Az PowerShell', 'Connect-AzAccount -UseDeviceAuthentication'],
-  ['Microsoft Graph', 'Connect-MgGraph -UseDeviceCode -Scopes "User.Read.All"'],
-  ['Exchange Online', 'Connect-ExchangeOnline -Device'],
-  ['Microsoft Teams', 'Connect-MicrosoftTeams -UseDeviceAuthentication'],
-  ['PnP PowerShell', 'Connect-PnPOnline -Url https://<tenant>.sharepoint.com -DeviceLogin -ClientId <app-id>'],
-  ['CLI for Microsoft 365', 'm365 login --authType deviceCode'],
-  ['GitHub CLI', 'gh auth login'],
-  ['AKS (Entra ID)', 'az aks get-credentials -g <rg> -n <cluster> && kubelogin convert-kubeconfig -l azurecli'],
-];
-
-function CopyButton({ text }: { text: string }) {
-  const [label, setLabel] = useState('Copier');
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setLabel('Copié');
-    } catch {
-      setLabel('Échec');
-    }
-    window.setTimeout(() => setLabel('Copier'), 1500);
-  };
-  return <button type="button" class="copy" onClick={copy} aria-label={`Copier : ${text}`}>{label}</button>;
-}
-
 function Versions() {
   const [data, setData] = useState<{ generated: string; arch: string; tools: ToolVersion[] } | null>(null);
   const [failed, setFailed] = useState(false);
@@ -215,12 +189,15 @@ export function Home() {
         <div class="columns">
           <details class="card" open>
             <summary><h2>Se connecter (device code)</h2></summary>
-            <p class="muted">Les jetons sont conservés dans le volume <code>/home/dev</code>.</p>
+            <p class="muted">
+              Les jetons sont conservés dans le volume <code>/home/dev</code>. Dans un workspace, le panneau
+              Connexions (Ctrl+Maj+K) complète ces commandes avec son tenant et les saisit dans un terminal.
+            </p>
             <dl class="cheatsheet">
-              {CHEATSHEET.map(([label, cmd]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd><code>{cmd}</code><CopyButton text={cmd} /></dd>
+              {connectionCommands().map((c) => (
+                <div key={c.id}>
+                  <dt>{c.label}</dt>
+                  <dd><code>{c.command}</code><CopyButton text={c.command} /></dd>
                 </div>
               ))}
             </dl>

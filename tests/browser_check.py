@@ -32,6 +32,18 @@ def sessions(page):
     return sorted(data.get("sessions", []))
 
 
+BUFFER_JS = (
+    "() => { const b = window.term?.buffer.active; if (!b) return null;"
+    " const l = []; for (let i = 0; i < b.length; i++) { const r = b.getLine(i);"
+    "   const t = r?.translateToString(true) || ''; if (r?.isWrapped && l.length) l[l.length - 1] += t; else l.push(t); }"
+    " return l.join('\\n'); }")
+
+
+def terminal_text(page, frame_selector):
+    """Contenu du terminal (xterm.js de ttyd, exposé en window.term), lignes coupées réassemblées."""
+    return page.frame_locator(frame_selector).locator("body").evaluate(BUFFER_JS)
+
+
 def tab_titles(page):
     return sorted(page.locator(f"{A} .dv-tab .cb-tab-label").all_inner_texts())
 
@@ -39,6 +51,7 @@ def tab_titles(page):
 with sync_playwright() as p:
     browser = p.chromium.launch()
     context = browser.new_context(viewport={"width": 1400, "height": 900})
+    context.grant_permissions(["clipboard-read", "clipboard-write"], origin=BASE)
     page = context.new_page()
     console = []
     page.on("console", lambda m: console.append(f"{m.type}: {m.text}"))
@@ -162,6 +175,97 @@ with sync_playwright() as p:
     check("fermeture enregistrée", tab_titles(page) == ["Bash 2", "PowerShell 1", "VS Code"], tab_titles(page))
     page.screenshot(path=f"{OUT}/3-workspace-final.png")
 
+    # --- Panneau Connexions : paramètres du workspace, cible d'insertion, saisie sans Entrée ---
+    D = f"{A} .conn-drawer"
+    page.click(f"{A} .conn-toggle")
+    page.wait_for_selector(D)
+    check("panneau Connexions ouvert", page.locator(D).count() == 1)
+    check("commande az sans tenant", page.locator(f"{D} [data-cmd=az] .conn-cmd").inner_text() == "az login --use-device-code")
+    check("PnP : valeurs à compléter", "app-id" in page.locator(f"{D} [data-cmd=pnp] .conn-missing").inner_text())
+    page.click(f"{D} .link-button")
+    sform = "dialog[open] .ws-settings"
+    page.wait_for_selector(sform)
+    page.fill(f"{sform} input[name=tenant]", "contoso.onmicrosoft.com")
+    page.fill(f"{sform} input[name=clientId]", "pas-un-guid")
+    page.click(f"{sform} button[type=submit]")
+    page.wait_for_selector(f"{sform} .error")
+    check("paramètre invalide refusé", "ClientId" in page.locator(f"{sform} .error").inner_text())
+    page.fill(f"{sform} input[name=clientId]", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    page.click(f"{sform} button[type=submit]")
+    page.wait_for_selector(sform, state="detached")
+    check("az complétée avec le tenant",
+          page.locator(f"{D} [data-cmd=az] .conn-cmd").inner_text() == "az login --use-device-code --tenant contoso.onmicrosoft.com")
+    pnp = page.locator(f"{D} [data-cmd=pnp] .conn-cmd").inner_text()
+    check("PnP : URL déduite du tenant et ClientId",
+          pnp.startswith("Connect-PnPOnline -Url https://contoso.sharepoint.com -DeviceLogin -ClientId aaaaaaaa-"), pnp)
+    check("cadre PRD conservé", page.locator(f"{A}.env-frame-prd").count() == 1)
+
+    bash_frame = f"{A} iframe[src^='/term/bash/?arg={WS_ID}~2']"
+    page.locator(f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']").click()
+    page.wait_for_timeout(300)
+    page.locator(bash_frame).click()
+    page.wait_for_timeout(300)
+    check("cible : dernier terminal utilisé", "Bash 2" in page.locator(f"{D} [data-cmd=az] .insert").inner_text(),
+          page.locator(f"{D} [data-cmd=az] .insert").inner_text())
+    check("cmdlet PowerShell : terminal PowerShell", "PowerShell 1" in page.locator(f"{D} [data-cmd=graph] .insert").inner_text(),
+          page.locator(f"{D} [data-cmd=graph] .insert").inner_text())
+    page.click(f"{D} [data-cmd=az] .insert")
+    page.wait_for_selector(f"{D} .conn-message")
+    check("saisie confirmée", "Bash 2" in page.locator(f"{D} .conn-message").inner_text(), page.locator(f"{D} .conn-message").inner_text())
+    page.wait_for_timeout(800)
+    check("focus rendu au terminal", page.evaluate("document.activeElement?.getAttribute('src') || ''").startswith("/term/bash/"))
+    line = terminal_text(page, bash_frame)
+    if line is None:
+        print("  (tampon xterm inaccessible : contenu du terminal non vérifié)")
+    else:
+        # dernière ligne non vide avant la barre d'état de tmux
+        last = [l for l in line.split("\n") if l.strip()][-2:-1]
+        check("commande saisie, non exécutée (dernière ligne)",
+              bool(last) and last[0].rstrip().endswith("az login --use-device-code --tenant contoso.onmicrosoft.com"), last)
+    page.keyboard.press("Control+Shift+K")  # depuis le terminal (focus dans l'iframe)
+    page.wait_for_timeout(300)
+    check("Ctrl+Maj+K depuis un terminal ferme le panneau", page.locator(D).count() == 0)
+    page.keyboard.press("Control+Shift+K")
+    page.wait_for_selector(D)
+    page.reload()
+    page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
+    check("panneau Connexions rouvert après rechargement", page.locator(D).count() == 1)
+    page.wait_for_timeout(2000)
+    page.screenshot(path=f"{OUT}/4-connexions.png")
+    page.click(f"{D} .conn-filter")  # au chargement, ttyd donne le focus au terminal
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    check("Échap ferme le panneau", page.locator(D).count() == 0)
+
+    # --- Copier-coller dans tmux : double-clic copié (OSC 52), Ctrl+V colle ---
+    page.locator(bash_frame).click()
+    page.keyboard.press("Control+U")  # efface la commande insérée plus haut
+    page.keyboard.type("clear; echo cloudboxcopie42")
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(1000)
+    term = page.frame_locator(bash_frame)
+    pos = term.locator("body").evaluate(
+        "() => { const t = window.term, b = t.buffer.active;"
+        " for (let y = 0; y < t.rows; y++) { const s = b.getLine(b.viewportY + y)?.translateToString(true) || '';"
+        "   if (s.trim() === 'cloudboxcopie42') { const r = document.querySelector('.xterm-screen').getBoundingClientRect();"
+        "     return { x: (3.5 * r.width) / t.cols, y: ((y + 0.5) * r.height) / t.rows }; } } return null; }")
+    if pos is None:
+        check("copie : ligne repérée dans le terminal", False, (terminal_text(page, bash_frame) or "")[-300:])
+    else:
+        screen_box = term.locator(".xterm-screen").bounding_box()  # coordonnées dans la page principale
+        page.mouse.dblclick(screen_box["x"] + pos["x"], screen_box["y"] + pos["y"])
+        page.wait_for_timeout(1500)
+        clip = page.evaluate("navigator.clipboard.readText()")
+        check("double-clic dans tmux : mot copié dans le presse-papiers", clip == "cloudboxcopie42", repr(clip))
+    page.evaluate("navigator.clipboard.writeText('echo colle-ok')")
+    page.locator(bash_frame).click()
+    page.keyboard.press("Control+U")
+    page.keyboard.press("Control+V")
+    page.wait_for_timeout(800)
+    lines = [l for l in (terminal_text(page, bash_frame) or "").split("\n") if l.strip()][-2:-1]
+    check("Ctrl+V colle le presse-papiers", bool(lines) and lines[0].rstrip().endswith("echo colle-ok"), lines)
+    page.keyboard.press("Control+U")
+
     # --- Navigation entre workspaces par la barre latérale, sans rechargement ---
     pwsh_frame = f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']"
     origin_before = page.locator(pwsh_frame).evaluate("f => f.contentWindow.performance.timeOrigin")
@@ -179,7 +283,7 @@ with sync_playwright() as p:
     origin_after = page.locator(pwsh_frame).evaluate("f => f.contentWindow.performance.timeOrigin")
     check("terminal non rechargé au retour", origin_before == origin_after, f"{origin_before} → {origin_after}")
     check("disposition intacte au retour", tab_titles(page) == ["Bash 2", "PowerShell 1", "VS Code"], tab_titles(page))
-    page.screenshot(path=f"{OUT}/4-navigation.png")
+    page.screenshot(path=f"{OUT}/5-navigation.png")
 
     # --- Barre latérale repliée, préférence conservée ---
     page.click(".sidebar-toggle")
@@ -188,7 +292,7 @@ with sync_playwright() as p:
     page.reload()
     page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
     check("repli conservé après rechargement", page.locator(".sidebar.collapsed").count() == 1)
-    page.screenshot(path=f"{OUT}/5-barre-repliee.png")
+    page.screenshot(path=f"{OUT}/6-barre-repliee.png")
     page.click(".sidebar-toggle")
 
     # --- Console : aucune violation de CSP ni erreur JavaScript du portail ---

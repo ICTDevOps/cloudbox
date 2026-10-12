@@ -3,14 +3,16 @@
 // Écoute sur un socket UNIX ; Caddy est la seule porte (authentification, Host, Origin).
 //
 //   GET    /api/health
-//   GET    /api/context                               contexte réel : az CLI, Az PowerShell, Kubernetes
+//   GET    /api/context                               contexte réel : az CLI, Az PowerShell, Kubernetes, GitHub
 //   GET    /api/workspaces                            liste (sans les dispositions)
 //   POST   /api/workspaces                            création { id, name, env, folder? }
 //   GET    /api/workspaces/:id                        workspace complet + sessions tmux actives
-//   PUT    /api/workspaces/:id                        mise à jour partielle { name?, env?, layout? }
+//   PUT    /api/workspaces/:id                        mise à jour partielle { name?, env?, layout?, settings? }
 //   POST   /api/workspaces/:id/panels                 attribue un numéro de panneau terminal { n }
 //   DELETE /api/workspaces/:id                        suppression (le dossier de travail est conservé)
 //   DELETE /api/workspaces/:id/sessions/:session      fermeture d'une session tmux du workspace
+//   POST   /api/workspaces/:id/sessions/:session/input  saisie d'un texte dans la session { text },
+//                                                     sans Entrée : l'utilisateur relit et valide
 //
 // Toute requête qui modifie l'état exige « Content-Type: application/json » : depuis une autre
 // origine, le navigateur ne peut pas l'envoyer sans pré-vérification CORS, jamais accordée.
@@ -30,6 +32,24 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const SHELLS = ['pwsh', 'bash'] as const;
 const ENVS = ['dev', 'acc', 'prd'] as const;
 type Env = (typeof ENVS)[number];
+const MAX_INPUT = 2000;
+
+// Paramètres de connexion du workspace, repris dans les commandes du portail puis saisis dans un
+// terminal : jeux de caractères stricts, aucune valeur ne peut sortir de son argument dans le shell
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SETTINGS_RULES: Record<string, { re: RegExp; message: string }> = {
+  tenant: {
+    re: /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9]([a-z0-9-]{0,62}\.)+[a-z]{2,63})$/i,
+    message: 'Tenant invalide : identifiant (GUID) ou domaine (contoso.onmicrosoft.com)',
+  },
+  subscription: { re: GUID_RE, message: 'Abonnement invalide : identifiant (GUID) attendu' },
+  sharepointUrl: {
+    re: /^https:\/\/[a-z0-9][a-z0-9-]{0,62}\.sharepoint\.(com|us|de|cn)(\/[A-Za-z0-9._~%/-]*)?$/i,
+    message: 'URL SharePoint invalide : https://<tenant>.sharepoint.com[/sites/…]',
+  },
+  clientId: { re: GUID_RE, message: "ClientId invalide : identifiant d'application (GUID) attendu" },
+};
+type Settings = Partial<Record<keyof typeof SETTINGS_RULES, string>>;
 
 interface Workspace {
   id: string;
@@ -39,6 +59,7 @@ interface Workspace {
   // Compteur des panneaux terminal, tenu par le serveur : un numéro attribué n'est jamais réutilisé,
   // même avec plusieurs onglets ouverts sur le workspace
   nextPanel: number;
+  settings?: Settings;
   layout: unknown;
   created: string;
   updated: string;
@@ -108,6 +129,31 @@ function checkName(v: unknown): string {
 function checkEnv(v: unknown): Env {
   if (typeof v === 'string' && (ENVS as readonly string[]).includes(v)) return v as Env;
   throw new HttpError(400, 'Environnement invalide (dev, acc ou prd)');
+}
+
+// Remplace l'ensemble des paramètres ; une valeur vide retire le paramètre
+function checkSettings(v: unknown): Settings {
+  if (!isRecord(v)) throw new HttpError(400, 'Paramètres invalides');
+  const settings: Settings = {};
+  for (const [key, value] of Object.entries(v)) {
+    const rule = SETTINGS_RULES[key];
+    if (!rule) throw new HttpError(400, `Paramètre inconnu : ${key}`);
+    if (value === undefined || value === null || value === '') continue;
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (!rule.re.test(text)) throw new HttpError(400, rule.message);
+    settings[key] = text;
+  }
+  return settings;
+}
+
+// Texte saisi dans un terminal : une ligne, sans caractère de contrôle (ni Entrée, ni séquence
+// d'échappement), donc jamais exécuté sans validation de l'utilisateur
+function checkInput(v: unknown): string {
+  if (typeof v !== 'string' || v.length < 1 || v.length > MAX_INPUT) {
+    throw new HttpError(400, `Texte invalide (1 à ${MAX_INPUT} caractères)`);
+  }
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(v)) throw new HttpError(400, 'Caractère de contrôle refusé');
+  return v;
 }
 
 // Dossier de travail : créé au besoin, résolu (liens compris) et obligatoirement sous /home/dev
@@ -208,6 +254,20 @@ async function azPowerShellContext(): Promise<Record<string, string> | null> {
   }
 }
 
+// Compte GitHub CLI : lu dans hosts.yml (forme simple écrite par gh), sans appel réseau
+async function githubContext(): Promise<Record<string, string> | null> {
+  const dir = process.env.GH_CONFIG_DIR ?? path.join(HOME, '.config', 'gh');
+  try {
+    const text = await readFile(path.join(dir, 'hosts.yml'), 'utf8');
+    const host = /^([A-Za-z0-9.-]+):\s*$/m.exec(text)?.[1];
+    if (!host) return null;
+    const user = /^\s+user:\s*(\S+)\s*$/m.exec(text)?.[1] ?? '';
+    return { host, user };
+  } catch {
+    return null;
+  }
+}
+
 async function kubernetesContext(): Promise<Record<string, string> | null> {
   try {
     const context = (await run('kubectl', ['config', 'current-context'])).trim();
@@ -275,13 +335,14 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       return send(res, 200, { ok: true });
 
     case 'GET /context': {
-      const [azureCli, azPowerShell, kubernetes] = await Promise.all([
+      const [azureCli, azPowerShell, kubernetes, github] = await Promise.all([
         azureCliContext(),
         azPowerShellContext(),
         kubernetesContext(),
+        githubContext(),
       ]);
       // Jusqu'à l'isolation par workspace (étape 3), ce contexte est commun à tous les workspaces
-      return send(res, 200, { azureCli, azPowerShell, kubernetes, sharedAcrossWorkspaces: true });
+      return send(res, 200, { azureCli, azPowerShell, kubernetes, github, sharedAcrossWorkspaces: true });
     }
 
     case 'GET /workspaces': {
@@ -342,6 +403,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         const w = await loadWorkspace(parts[2]);
         if ('name' in body) w.name = checkName(body.name);
         if ('env' in body) w.env = checkEnv(body.env);
+        if ('settings' in body) w.settings = checkSettings(body.settings);
         if ('layout' in body) {
           if (body.layout !== null && !isRecord(body.layout)) throw new HttpError(400, 'Disposition invalide');
           // Plusieurs onglets sur le même workspace : la dernière disposition enregistrée l'emporte
@@ -382,6 +444,19 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       const session = parts[4];
       if (!sessionPattern(ws.id).test(session)) throw new HttpError(400, 'Session invalide');
       await killSession(session);
+      return send(res, 204);
+    }
+
+    case 'POST /workspaces/:/sessions/:/input': {
+      const ws = await loadWorkspace(parts[2]);
+      const session = parts[4];
+      if (!sessionPattern(ws.id).test(session)) throw new HttpError(400, 'Session invalide');
+      const body = await readBody(req);
+      const text = checkInput(isRecord(body) ? body.text : undefined);
+      // -l : texte littéral (aucun nom de touche interprété) ; « =nom: » : session exacte
+      await run('tmux', ['send-keys', '-t', `=${session}:`, '-l', '--', text]).catch(() => {
+        throw new HttpError(404, 'Session introuvable (terminal fermé ?)');
+      });
       return send(res, 204);
     }
 

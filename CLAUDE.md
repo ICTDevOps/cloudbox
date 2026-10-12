@@ -194,6 +194,9 @@ Les caches de jetons MSAL sont en clair dans `/home/dev`. Règles :
 7. API : écritures en JSON uniquement (`Content-Type: application/json`, donc requête
    « non simple » bloquée en cross-origin), noms de workspace validés strictement
    (`^[a-z0-9][a-z0-9-]{0,31}$`) avant tout usage dans une commande ou un chemin.
+   Les paramètres de connexion d'un workspace (tenant, abonnement, URL SharePoint, ClientId) suivent
+   des jeux de caractères stricts ; la saisie dans un terminal (`tmux send-keys -l`) refuse tout
+   caractère de contrôle : jamais d'Entrée, la commande est validée par l'utilisateur.
 
 ## Authentification vers Azure / M365
 

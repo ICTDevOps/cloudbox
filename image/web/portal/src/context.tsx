@@ -1,24 +1,39 @@
 // Barre de contexte : ce que les outils utilisent réellement (lu par cloudbox-api dans les fichiers
-// de configuration), jamais une valeur déclarée. Rafraîchie toutes les 15 secondes.
+// de configuration), jamais une valeur déclarée. Une seule interrogation toutes les 15 secondes,
+// partagée par tous les composants abonnés (barres, panneau Connexions), tant qu'il y en a un.
 import { useEffect, useState } from 'preact/hooks';
 import { api, type AzureContext, type CloudContext } from './api';
 
 const REFRESH_MS = 15_000;
 
-function useCloudContext(): CloudContext | null | 'error' {
-  const [ctx, setCtx] = useState<CloudContext | null | 'error'>(null);
+type ContextState = CloudContext | null | 'error';
+let current: ContextState = null;
+let timer = 0;
+const listeners = new Set<(c: ContextState) => void>();
+
+function load(): void {
+  api
+    .context()
+    .then((c) => (current = c))
+    .catch(() => (current = 'error'))
+    .finally(() => listeners.forEach((l) => l(current)));
+}
+
+export function refreshCloudContext(): void {
+  if (listeners.size) load();
+}
+
+export function useCloudContext(): ContextState {
+  const [ctx, setCtx] = useState<ContextState>(current);
   useEffect(() => {
-    let alive = true;
-    const load = () =>
-      api
-        .context()
-        .then((c) => alive && setCtx(c))
-        .catch(() => alive && setCtx('error'));
-    load();
-    const timer = window.setInterval(load, REFRESH_MS);
+    listeners.add(setCtx);
+    if (listeners.size === 1) {
+      load();
+      timer = window.setInterval(load, REFRESH_MS);
+    }
     return () => {
-      alive = false;
-      window.clearInterval(timer);
+      listeners.delete(setCtx);
+      if (!listeners.size) window.clearInterval(timer);
     };
   }, []);
   return ctx;

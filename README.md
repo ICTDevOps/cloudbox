@@ -53,8 +53,10 @@ Terminal sans navigateur : `docker exec -it cloudbox pwsh`, `docker exec -it clo
 du terminal web s'y rattachent avec `tmux attach -t pwsh` ou `tmux attach -t bash`.
 
 Dans le terminal web, la souris pilote tmux : clic droit pour le menu des panneaux (scinder,
-fermer…), molette pour l'historique. Maj + sélection copie du texte, Maj + clic droit ouvre le
-menu du navigateur. Après un redémarrage ou une mise à jour du container, les terminaux ouverts
+fermer…), molette pour l'historique. **Copier** : sélectionner à la souris (ou double-cliquer sur
+un mot) ; le texte part dans le presse-papiers du poste (« Copié » s'affiche). **Coller** :
+Ctrl+V, ou Maj + clic droit pour le menu du navigateur. Ctrl+V n'est donc plus transmis au
+terminal (dans vim, le mode bloc reste accessible par Ctrl+Q). Après un redémarrage ou une mise à jour du container, les terminaux ouverts
 se reconnectent seuls dès que le serveur répond (la session tmux est retrouvée si le container
 n'a pas été recréé).
 
@@ -85,6 +87,15 @@ Bash et VS Code dans une disposition en panneaux (redimensionnables, déplaçabl
   fermer l'onglet du navigateur ou déplacer un panneau ne l'arrête pas. Seule la croix d'un
   onglet (avec confirmation) ferme la session. Supprimer un workspace ferme ses sessions mais
   **conserve son dossier**.
+- **Paramètres** (bouton ⚙) : nom, environnement, et valeurs de connexion du workspace (tenant,
+  abonnement, URL SharePoint, ClientId de l'application Entra pour PnP et CLI for Microsoft 365).
+- **Connexions** (bouton à droite de la barre, ou Ctrl+Maj+K, y compris depuis un terminal) : panneau
+  des commandes de connexion, complétées avec les paramètres du workspace. Chaque commande se
+  copie, ou se saisit d'un clic dans le dernier terminal utilisé (un terminal PowerShell pour les
+  cmdlets), **sans être exécutée** : on la relit, puis Entrée. L'état réel est indiqué quand le
+  portail peut le lire (az CLI, Az PowerShell, kubectl, gh), avec une alerte si az est connecté à
+  un autre tenant ou abonnement que ceux du workspace ; Graph, Exchange, Teams et PnP dépendent de
+  chaque session PowerShell et ne sont pas visibles.
 - Un workspace PRD est encadré de rouge, et le prompt de ses shells porte un badge
   `PRD <identifiant>`.
 - Le contexte affiché (abonnement az CLI, contexte Az PowerShell, cluster Kubernetes) est lu dans
@@ -97,6 +108,9 @@ Bash et VS Code dans une disposition en panneaux (redimensionnables, déplaçabl
 > identités par workspace est l'étape 3 de la feuille de route.
 
 ## Connexion aux services (device code)
+
+Dans un workspace, le panneau **Connexions** donne ces commandes déjà complétées (tenant,
+abonnement, URL SharePoint, ClientId).
 
 | Service | Commande |
 |---|---|

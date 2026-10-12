@@ -12,7 +12,16 @@ export interface WorkspaceSummary {
   updated: string;
 }
 
+// Paramètres de connexion propres au workspace (validés strictement par cloudbox-api)
+export interface WorkspaceSettings {
+  tenant?: string;
+  subscription?: string;
+  sharepointUrl?: string;
+  clientId?: string;
+}
+
 export interface Workspace extends WorkspaceSummary {
+  settings?: WorkspaceSettings;
   layout: object | null;
   sessions: string[];
 }
@@ -29,6 +38,7 @@ export interface CloudContext {
   azureCli: AzureContext | null;
   azPowerShell: AzureContext | null;
   kubernetes: { context: string; namespace: string } | null;
+  github: { host: string; user: string } | null;
   sharedAcrossWorkspaces: boolean;
 }
 
@@ -77,7 +87,7 @@ export const api = {
   getWorkspace: (id: string) => request<Workspace>('GET', `/api/workspaces/${id}`),
   createWorkspace: (data: { id: string; name: string; env: Env; folder?: string }) =>
     request<Workspace>('POST', '/api/workspaces', data),
-  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout'>>) =>
+  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout' | 'settings'>>) =>
     request<WorkspaceSummary>('PUT', `/api/workspaces/${id}`, data),
   // Numéro de panneau terminal attribué par le serveur (jamais réutilisé, même avec plusieurs onglets)
   allocatePanel: async (id: string) => (await request<{ n: number }>('POST', `/api/workspaces/${id}/panels`)).n,
@@ -93,6 +103,9 @@ export const api = {
   deleteWorkspace: (id: string) => request<void>('DELETE', `/api/workspaces/${id}`),
   closeSession: (id: string, session: string) =>
     request<void>('DELETE', `/api/workspaces/${id}/sessions/${session}`),
+  // Saisie dans un terminal, sans Entrée
+  sendInput: (id: string, session: string, text: string) =>
+    request<void>('POST', `/api/workspaces/${id}/sessions/${session}/input`, { text }),
   versions: async (): Promise<{ generated: string; arch: string; tools: ToolVersion[] }> => {
     const response = await fetch('/versions.json', { cache: 'no-cache', credentials: 'same-origin' });
     if (!response.ok) throw new ApiError(response.status, 'Versions indisponibles');

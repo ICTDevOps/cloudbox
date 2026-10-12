@@ -8,6 +8,9 @@
 //  - une session n'est fermée que sur un clic explicite sur la croix d'un onglet, jamais sur les
 //    retraits internes de Dockview (restauration, déplacement d'onglet ou de groupe) ;
 //  - aucune sauvegarde pendant la restauration d'une disposition.
+//
+// Le dock suit aussi le dernier terminal utilisé (focus dans son iframe ou onglet activé) : c'est la
+// cible de l'insertion de commandes du panneau Connexions.
 import {
   createDockview,
   themeDark,
@@ -30,6 +33,19 @@ interface PanelParams {
 
 const TITLES: Record<PanelKind, string> = { pwsh: 'PowerShell', bash: 'Bash', code: 'VS Code' };
 const SAVE_DELAY_MS = 600;
+// Raccourci du panneau Connexions, émis aussi depuis les terminaux (qui ont le focus clavier)
+export const CONNECTIONS_EVENT = 'cloudbox:connections';
+
+export function isConnectionsShortcut(e: KeyboardEvent): boolean {
+  return e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'k';
+}
+
+export interface TerminalRef {
+  panelId: string;
+  title: string;
+  kind: 'pwsh' | 'bash';
+  session: string;
+}
 
 function panelTitle(p: PanelParams): string {
   return p.kind === 'code' ? TITLES.code : `${TITLES[p.kind]} ${p.n}`;
@@ -39,9 +55,11 @@ function panelTitle(p: PanelParams): string {
 class FramePanel implements IContentRenderer {
   readonly element = document.createElement('div');
   private readonly ws: Workspace;
+  private readonly onFocus: (panelId: string) => void;
 
-  constructor(ws: Workspace) {
+  constructor(ws: Workspace, onFocus: (panelId: string) => void) {
     this.ws = ws;
+    this.onFocus = onFocus;
     this.element.className = 'panel-frame';
   }
 
@@ -54,6 +72,22 @@ class FramePanel implements IContentRenderer {
         ? `/code/?folder=${encodeURIComponent(this.ws.folder)}`
         : `/term/${p.kind}/?arg=${this.ws.id}~${p.n}`;
     frame.setAttribute('allow', 'clipboard-read; clipboard-write');
+    frame.dataset.panel = parameters.api.id;
+    if (p.kind !== 'code') {
+      // Même origine : on écoute la page du terminal, à chaque chargement (reconnexion comprise).
+      // Pas dans VS Code, où Ctrl+Maj+K supprime la ligne.
+      frame.addEventListener('load', () => {
+        const win = frame.contentWindow;
+        if (!win) return;
+        win.addEventListener('focus', () => this.onFocus(parameters.api.id));
+        win.addEventListener('keydown', (e) => {
+          if (!isConnectionsShortcut(e)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent(CONNECTIONS_EVENT));
+        }, true);
+      });
+    }
     this.element.append(frame);
   }
 }
@@ -120,6 +154,10 @@ function installDragGuard(root: HTMLElement): () => void {
 export interface DockHandle {
   addPanel(kind: PanelKind): void;
   hasCode(): boolean;
+  // Dernier terminal utilisé, compatible avec le shell demandé
+  terminalFor(shell: 'any' | 'pwsh'): TerminalRef | null;
+  // Active un panneau et donne le focus clavier à son terminal
+  focusPanel(panelId: string): void;
   onChange(listener: () => void): void;
   dispose(): void;
 }
@@ -129,6 +167,8 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   let disposed = false;
   let saveTimer = 0;
   const listeners: (() => void)[] = [];
+  // Panneaux par ordre d'utilisation, le plus récent en premier
+  let recent: string[] = [];
   const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
   const closePanel = async (parameters: TabPartInitParameters) => {
@@ -150,7 +190,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
 
   const dockApi: DockviewApi = createDockview(root, {
     theme: dark ? themeDark : themeLight,
-    createComponent: () => new FramePanel(ws),
+    createComponent: () => new FramePanel(ws, (id) => touch(id)),
     createTabComponent: () => new ClosableTab(closePanel),
     defaultTabComponent: 'cloudbox-tab',
     // Les iframes ne doivent pas être déplacées dans le DOM (elles se rechargeraient)
@@ -182,6 +222,19 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
 
   const notify = () => listeners.forEach((l) => l());
 
+  const touch = (id: string) => {
+    if (recent[0] === id) return;
+    recent = [id, ...recent.filter((r) => r !== id)];
+    notify();
+  };
+
+  const terminalRef = (id: string): TerminalRef | null => {
+    const panel = dockApi.getPanel(id);
+    const p = panel?.params as PanelParams | undefined;
+    if (!panel || !p || p.kind === 'code') return null;
+    return { panelId: id, title: panelTitle(p), kind: p.kind, session: `${ws.id}_${p.kind}_${p.n}` };
+  };
+
   // Restauration : la disposition enregistrée, sinon la disposition par défaut.
   // La restauration émet des événements de disposition : aucune sauvegarde avant la fin.
   const restore = async () => {
@@ -208,6 +261,9 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
       if (!restoring) save();
       notify();
     }),
+    dockApi.onDidActivePanelChange(({ panel }) => {
+      if (panel && !restoring) touch(panel.id);
+    }),
   ];
   const removeGuard = installDragGuard(root);
 
@@ -228,6 +284,25 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
         .catch((err: Error) => onError(err.message));
     },
     hasCode: () => Boolean(dockApi.getPanel('code')),
+    terminalFor(shell) {
+      // Ordre : terminaux récemment utilisés, puis les autres dans l'ordre de la disposition
+      const ids = [...recent, ...dockApi.panels.map((p) => p.id).filter((id) => !recent.includes(id))];
+      for (const id of ids) {
+        const ref = terminalRef(id);
+        if (ref && (shell === 'any' || ref.kind === shell)) return ref;
+      }
+      return null;
+    },
+    focusPanel(panelId) {
+      dockApi.getPanel(panelId)?.api.setActive();
+      const frame = root.querySelector<HTMLIFrameElement>(`iframe[data-panel="${CSS.escape(panelId)}"]`);
+      try {
+        frame?.contentWindow?.focus();
+        frame?.contentDocument?.querySelector<HTMLElement>('.xterm-helper-textarea')?.focus();
+      } catch {
+        // page du terminal pas encore chargée
+      }
+    },
     onChange(listener) {
       listeners.push(listener);
     },

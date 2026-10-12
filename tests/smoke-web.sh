@@ -144,6 +144,25 @@ for bad in '../x~1' 'client~1&arg=other~2' 'inconnu~1' 'client' 'Client~1'; do
 done
 expect "sessions tmux des workspaces" "client-prd_bash_2 client_pwsh_1" "$(docker exec "$NAME" tmux ls -F '#S' | grep _ | sort | tr '\n' ' ' | sed 's/ $//')"
 expect "GET workspace : sessions" "client_pwsh_1" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client" | docker exec -i "$NAME" jq -r '.sessions | join(" ")')"
+# Paramètres de connexion : jeux de caractères stricts (les valeurs sont saisies dans un terminal)
+S="$BASE/api/workspaces/client"
+expect "PUT paramètres valides" 200 "$(api -X PUT "${JSON[@]}" -d '{"settings":{"tenant":"contoso.onmicrosoft.com","subscription":"11111111-2222-3333-4444-555555555555","sharepointUrl":"https://contoso.sharepoint.com/sites/it","clientId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}}' "$S")"
+expect "paramètres enregistrés" "contoso.onmicrosoft.com" "$(docker exec "$NAME" jq -r .settings.tenant /home/dev/.cloudbox/workspaces/client.json)"
+for bad in '{"tenant":"x;id"}' '{"tenant":"$(id).com"}' '{"subscription":"prod"}' '{"sharepointUrl":"https://evil.example.com"}' '{"sharepointUrl":"https://c.sharepoint.com/\"x"}' '{"clientId":"1 2"}' '{"autre":"x"}'; do
+    expect "PUT paramètres refusés : $bad" 400 "$(api -X PUT "${JSON[@]}" -d "{\"settings\":$bad}" "$S")"
+done
+expect "paramètre vidé" "null" "$(api -X PUT "${JSON[@]}" -d '{"settings":{"tenant":"contoso.onmicrosoft.com","clientId":""}}' "$S" >/dev/null; docker exec "$NAME" jq -c .settings.clientId /home/dev/.cloudbox/workspaces/client.json)"
+
+# Saisie dans un terminal : texte littéral, sans Entrée
+expect "POST saisie dans un terminal" 204 "$(api -X POST "${JSON[@]}" -d '{"text":"echo cloudbox-saisie $HOME"}' "$S/sessions/client_pwsh_1/input")"
+sleep 1
+expect "texte saisi, non exécuté" 1 "$(docker exec "$NAME" tmux capture-pane -p -t '=client_pwsh_1:' | grep -c 'cloudbox-saisie')"
+docker exec "$NAME" tmux send-keys -t '=client_pwsh_1:' C-u
+expect "saisie avec retour à la ligne refusée" 400 "$(api -X POST "${JSON[@]}" -d '{"text":"id\nid"}' "$S/sessions/client_pwsh_1/input")"
+expect "saisie avec séquence d'échappement refusée" 400 "$(api -X POST "${JSON[@]}" -d '{"text":"\u001b[201~id"}' "$S/sessions/client_pwsh_1/input")"
+expect "saisie dans un autre workspace refusée" 400 "$(api -X POST "${JSON[@]}" -d '{"text":"id"}' "$S/sessions/client-prd_bash_2/input")"
+expect "saisie dans une session absente" 404 "$(api -X POST "${JSON[@]}" -d '{"text":"id"}' "$S/sessions/client_pwsh_9/input")"
+expect "saisie sans Content-Type JSON (CSRF)" 415 "$(api -X POST -H 'Content-Type: text/plain' -d '{"text":"id"}' "$S/sessions/client_pwsh_1/input")"
 expect "DELETE session d'un autre workspace" 400 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/client/sessions/client-prd_bash_2")"
 expect "DELETE workspace client" 204 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/client")"
 expect "sessions restantes (client-prd intact)" "client-prd_bash_2" "$(docker exec "$NAME" tmux ls -F '#S' | grep _ | sort | tr '\n' ' ' | sed 's/ $//')"
