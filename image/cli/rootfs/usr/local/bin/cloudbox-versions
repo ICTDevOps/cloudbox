@@ -74,6 +74,7 @@ add IaC "Terraform" terraform terraform version
 
 add "Outils" "GitHub CLI" gh gh --version
 add "Outils" "Bash" bash bash --version
+add "Outils" "curl" curl curl --version
 add "Outils" "git" git git --version
 add "Outils" "yq" yq yq --version
 add "Outils" "jq" jq jq --version
