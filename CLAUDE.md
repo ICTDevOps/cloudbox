@@ -302,7 +302,9 @@ l'isolation par workspace suffit : pas d'authentification Entra ID devant `local
 
 ## Conventions
 
-- Documentation et commentaires en français (comme WSLC).
+- Commentaires et documentation interne (dont ce fichier) en français. **Le `README.md` est en
+  anglais**, illustré par les captures de `docs/screenshots/` (régénérées par
+  `docs/screenshots/capture.sh` quand l'interface change).
 - Interface du portail en français et en anglais : toute chaîne affichée passe par
   `image/web/portal/src/i18n.ts` (les deux dictionnaires, le français fait référence) ; les
   messages d'erreur de `cloudbox-api` sont donnés dans les deux langues (`Accept-Language`).
