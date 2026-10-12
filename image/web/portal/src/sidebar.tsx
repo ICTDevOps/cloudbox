@@ -16,7 +16,8 @@ function readCollapsed(): boolean {
 }
 
 function initials(name: string): string {
-  const words = name.split(/[\s\-_]+/).filter(Boolean);
+  // Mots commençant par une lettre ou un chiffre (« Contoso — production » : CP, pas C—)
+  const words = name.split(/[\s\-_]+/).filter((w) => /^[\p{L}\p{N}]/u.test(w));
   const letters = words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2);
   return letters.toUpperCase();
 }
