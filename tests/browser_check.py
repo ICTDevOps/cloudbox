@@ -63,8 +63,20 @@ with sync_playwright() as p:
     check("page de connexion", page.locator("#login-form").count() == 1)
     page.fill("#token", TOKEN)
     page.click("button[type=submit]")
-    page.wait_for_selector(".ws-grid", timeout=15000)
-    check("accueil affiché après connexion", page.locator(".home .create-ws").count() == 1)
+    page.wait_for_selector(".home .tool-tiles", timeout=15000)
+    check("accueil affiché après connexion", page.locator(".home .info-tile").count() == 3)
+    check("tuiles explicatives, sans lien", page.locator(".home .tool-tiles a").count() == 0)
+    check("aucune liste de workspaces sur l'accueil", page.locator(".home .create-ws, .home .ws-card").count() == 0)
+    page.wait_for_selector(".home .version-card", timeout=15000)
+    categories = page.locator(".home .version-card h3").all_text_contents()
+    check("versions par catégorie", len(categories) >= 7 and "Extensions VS Code" in categories, categories)
+    check("versions dans les tuiles", page.locator(".home .tile-version").count() == 3)
+    page.fill(".versions-filter", "kubectl")
+    check("filtre des versions", page.locator(".home .version-card").count() == 1
+          and page.locator(".home .version-card tr").count() == 1)
+    page.fill(".versions-filter", "")
+    check("bandeau de bas de page", page.locator(".home-footer").inner_text() == "Olivier Malfroidt — VNET Consult — 2026")
+    check("bouton « premier workspace »", page.locator(".home .intro button").count() == 1)
     check("barre latérale", page.locator(".sidebar .nav-new").count() == 1)
     page.wait_for_selector(".context-bar .chip", timeout=15000)
     check("barre de contexte réel", page.locator(".context-bar .chip").count() >= 3)
@@ -310,6 +322,17 @@ with sync_playwright() as p:
     check("repli conservé après rechargement", page.locator(".sidebar.collapsed").count() == 1)
     page.screenshot(path=f"{OUT}/6-barre-repliee.png")
     page.click(".sidebar-toggle")
+
+    # --- Suppression d'un workspace depuis ses paramètres ---
+    page.click(".sidebar a.nav-item[href='#/w/projet-b']")
+    page.wait_for_selector(f"{A}.env-frame-dev .dv-tab", timeout=20000)
+    page.click(f"{A} .ws-toolbar button:has-text('Paramètres')")
+    page.wait_for_selector("dialog[open] .ws-settings")
+    page.click("dialog[open] .danger-zone button")
+    page.wait_for_timeout(1500)
+    check("workspace supprimé : retour à l'accueil", page.url.endswith("#/") and page.locator(".home .tool-tiles").count() == 1, page.url)
+    check("workspace retiré de la barre", page.locator(".sidebar a.nav-item[href='#/w/projet-b']").count() == 0)
+    page.screenshot(path=f"{OUT}/7-accueil-final.png", full_page=True)
 
     # --- Console : aucune violation de CSP ni erreur JavaScript du portail ---
     # vsda.js : module propriétaire de VS Code absent de code-server (404 en text/plain, bloqué par

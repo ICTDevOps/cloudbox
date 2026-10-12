@@ -71,6 +71,14 @@ tests/smoke-browser.sh cloudbox:web     # Chromium headless (Playwright), captur
 CLOUDBOX_IMAGE=cloudbox:web docker compose up -d
 ```
 
+## Accueil
+
+L'accueil présente les trois outils de chaque workspace (PowerShell, Bash, VS Code), les gestes
+utiles du terminal et la version de chaque outil de l'image, par catégorie et avec un filtre
+(extensions VS Code comprises). Les workspaces se créent et s'ouvrent depuis la barre latérale.
+Au premier démarrage, le panneau VS Code affiche « VS Code démarre… » et se recharge seul le
+temps que code-server installe ses extensions.
+
 ## Workspaces
 
 Un workspace regroupe, pour un client, un projet ou un environnement, des terminaux PowerShell et
@@ -85,7 +93,7 @@ Bash et VS Code dans une disposition en panneaux (redimensionnables, déplaçabl
   (`~/.cloudbox/workspaces/<identifiant>.json`) et retrouvée à la connexion suivante.
 - Chaque panneau terminal a sa session tmux, `<identifiant>_<shell>_<n>` : recharger la page,
   fermer l'onglet du navigateur ou déplacer un panneau ne l'arrête pas. Seule la croix d'un
-  onglet (avec confirmation) ferme la session. Supprimer un workspace ferme ses sessions mais
+  onglet (avec confirmation) ferme la session. Supprimer un workspace (⚙ Paramètres) ferme ses sessions mais
   **conserve son dossier**.
 - **Paramètres** (bouton ⚙) : nom, environnement, et valeurs de connexion du workspace (tenant,
   abonnement, URL SharePoint, ClientId de l'application Entra pour PnP et CLI for Microsoft 365).
@@ -136,8 +144,8 @@ Les caches de jetons sont dans `/home/dev` (volume) : ils survivent à la recré
 | Outils | gh, git, jq, yq, openssl, tmux, fzf, ripgrep, bat, outils réseau… |
 | Interface web | Caddy, ttyd + tmux, code-server, s6-overlay ; portail TypeScript + Vite + Preact + Dockview |
 
-`cloudbox-versions` affiche les versions installées ; le portail et chaque release GitHub
-(`versions.json`) reprennent cette liste.
+`cloudbox-versions` affiche les versions installées (outils, modules PowerShell, extensions
+VS Code) ; l'accueil du portail et chaque release GitHub (`versions.json`) reprennent cette liste.
 
 Extensions VS Code préinstallées (Open VSX) : PowerShell, HashiCorp Terraform, OpenTofu, YAML,
 Kubernetes. **L'extension Bicep (`ms-azuretools.vscode-bicep`) n'est pas publiée sur Open VSX** :

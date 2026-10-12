@@ -1,9 +1,12 @@
-// Accueil : workspaces, création, accès rapide, aide (connexions et versions).
+// Accueil : présentation des outils (PowerShell, Bash, VS Code), astuces et versions de l'image.
+// Les workspaces (liste, création) sont dans la barre latérale, les connexions dans chaque workspace.
 import { useEffect, useState } from 'preact/hooks';
-import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type ToolVersion, type WorkspaceSummary } from './api';
-import { connectionCommands, CopyButton } from './connections';
+import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type ToolVersion } from './api';
 import { ContextBar } from './context';
-import { useWorkspaces, workspaceStore } from './store';
+import { useWorkspaces } from './store';
+
+// Ouvre la fenêtre de création de la barre latérale
+export const NEW_WORKSPACE_EVENT = 'cloudbox:new-workspace';
 
 export function EnvBadge({ env, large = false }: { env: Env; large?: boolean }) {
   return <span class={`env-badge env-${env}${large ? ' env-large' : ''}`}>{ENV_LABELS[env]}</span>;
@@ -11,38 +14,6 @@ export function EnvBadge({ env, large = false }: { env: Env; large?: boolean }) 
 
 export function TopBar({ children }: { children?: preact.ComponentChildren }) {
   return <header class="topbar">{children}</header>;
-}
-
-function WorkspaceCard({ ws, onDeleted }: { ws: WorkspaceSummary; onDeleted: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const remove = async () => {
-    const ok = window.confirm(
-      `Supprimer le workspace « ${ws.name} » ?\n\nSes sessions de terminal seront fermées.\n` +
-        `Le dossier ${ws.folder} est conservé.`,
-    );
-    if (!ok) return;
-    setBusy(true);
-    try {
-      await api.deleteWorkspace(ws.id);
-      onDeleted();
-    } catch (err) {
-      window.alert((err as Error).message);
-      setBusy(false);
-    }
-  };
-  return (
-    <article class={`ws-card env-border-${ws.env}`}>
-      <div class="ws-card-head">
-        <EnvBadge env={ws.env} />
-        <h3>{ws.name}</h3>
-      </div>
-      <p class="muted ws-folder"><code>{ws.folder}</code></p>
-      <div class="ws-actions">
-        <a class="button primary" href={`#/w/${ws.id}`}>Ouvrir</a>
-        <button type="button" class="button ghost" onClick={remove} disabled={busy}>Supprimer</button>
-      </div>
-    </article>
-  );
 }
 
 export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void }) {
@@ -105,43 +76,125 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
   );
 }
 
-function Versions() {
-  const [data, setData] = useState<{ generated: string; arch: string; tools: ToolVersion[] } | null>(null);
-  const [failed, setFailed] = useState(false);
+interface Versions {
+  generated: string;
+  arch: string;
+  tools: ToolVersion[];
+}
+
+function useVersions(): Versions | null | 'error' {
+  const [data, setData] = useState<Versions | null | 'error'>(null);
   useEffect(() => {
-    api.versions().then(setData).catch(() => setFailed(true));
+    api.versions().then(setData).catch(() => setData('error'));
   }, []);
-  if (failed) return <p class="muted">Versions indisponibles.</p>;
+  return data;
+}
+
+// Version d'un outil (vide tant que versions.json n'est pas chargé)
+function versionOf(data: Versions | null | 'error', name: string): string {
+  if (!data || data === 'error') return '';
+  return data.tools.find((t) => t.name === name)?.version ?? '';
+}
+
+function Tile({ icon, kind, title, version, children }: {
+  icon: string;
+  kind: string;
+  title: string;
+  version: string;
+  children: preact.ComponentChildren;
+}) {
+  return (
+    <article class="tile info-tile">
+      <div class="tile-head">
+        <span class={`tile-icon ${kind}`} aria-hidden="true">{icon}</span>
+        <span class="tile-title">{title}</span>
+        {version && <span class="tile-version">{version}</span>}
+      </div>
+      <div class="tile-text">{children}</div>
+    </article>
+  );
+}
+
+function ToolTiles({ data }: { data: Versions | null | 'error' }) {
+  const extensions = data && data !== 'error' ? data.tools.filter((t) => t.category === 'Extensions VS Code') : [];
+  return (
+    <div class="tiles tool-tiles">
+      <Tile icon=">_" kind="pwsh" title="PowerShell" version={versionOf(data, 'PowerShell')}>
+        <p>Shell par défaut des terminaux. Modules préinstallés : Az, Microsoft.Graph, ExchangeOnlineManagement,
+          MicrosoftTeams, PnP.PowerShell.</p>
+        <p>Le prompt affiche l'environnement du workspace et le contexte réel : abonnement az CLI (<code>az:</code>)
+          et contexte Az PowerShell (<code>AzPS:</code>).</p>
+      </Tile>
+      <Tile icon="$_" kind="bash" title="Bash" version={versionOf(data, 'Bash')}>
+        <p>Les mêmes outils en ligne de commande : az, azd, Bicep, kubectl, helm, k9s, OpenTofu, Terraform, gh,
+          m365…</p>
+        <p>Complétion activée (az, kubectl, helm, gh, tofu…) et prompt avec la branche git et le contexte
+          Kubernetes.</p>
+      </Tile>
+      <Tile icon="{ }" kind="code" title="VS Code" version={versionOf(data, 'code-server')}>
+        <p>VS Code dans le navigateur (code-server), ouvert sur le dossier du workspace, avec son terminal
+          intégré.</p>
+        <p>Extensions : {extensions.length ? extensions.map((e) => e.name).join(', ') : 'PowerShell, Terraform, OpenTofu, YAML, Kubernetes'}
+          {' '}(Open VSX).</p>
+      </Tile>
+    </div>
+  );
+}
+
+function Tips() {
+  return (
+    <ul class="tips" aria-label="Astuces">
+      <li><kbd>Clic droit</kbd> menu tmux (scinder, fermer)</li>
+      <li><kbd>Sélection</kbd> copie</li>
+      <li><kbd>Ctrl</kbd>+<kbd>V</kbd> colle</li>
+      <li><kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>K</kbd> commandes de connexion</li>
+    </ul>
+  );
+}
+
+function VersionCards({ data }: { data: Versions | null | 'error' }) {
+  const [filter, setFilter] = useState('');
+  if (data === 'error') return <p class="muted">Versions indisponibles.</p>;
   if (!data) return <p class="muted">Chargement…</p>;
-  const rows: preact.JSX.Element[] = [];
-  let category = '';
-  for (const tool of data.tools) {
-    if (tool.category !== category) {
-      category = tool.category;
-      rows.push(<tr class="category" key={`c-${category}`}><td colSpan={3}>{category}</td></tr>);
-    }
-    rows.push(
-      <tr key={tool.name}>
-        <td>{tool.name}</td>
-        <td><code>{tool.command}</code></td>
-        <td class={tool.version ? '' : 'error'}>{tool.version || 'non disponible'}</td>
-      </tr>,
-    );
-  }
+  const q = filter.trim().toLowerCase();
+  const tools = data.tools.filter(
+    (t) => !q || [t.name, t.command, t.category, t.version].some((v) => v.toLowerCase().includes(q)),
+  );
+  const categories = [...new Set(tools.map((t) => t.category))];
   return (
     <>
-      <p class="muted">Image construite le {new Date(data.generated).toLocaleDateString('fr-FR')} ({data.arch}).</p>
-      <table class="versions">
-        <thead><tr><th scope="col">Outil</th><th scope="col">Commande</th><th scope="col">Version</th></tr></thead>
-        <tbody>{rows}</tbody>
-      </table>
+      <div class="versions-head">
+        <input type="search" class="versions-filter" placeholder="Filtrer (az, kubectl, Graph…)" value={filter}
+          onInput={(e) => setFilter(e.currentTarget.value)} aria-label="Filtrer les outils" />
+        <span class="muted">
+          Image construite le {new Date(data.generated).toLocaleDateString('fr-FR')} ({data.arch})
+        </span>
+      </div>
+      <div class="versions-grid">
+        {categories.map((category) => (
+          <section class="card version-card" key={category}>
+            <h3>{category}</h3>
+            <table>
+              <tbody>
+                {tools.filter((t) => t.category === category).map((t) => (
+                  <tr key={t.name} title={`Commande : ${t.command}`}>
+                    <td>{t.name}</td>
+                    <td class={t.version ? 'version' : 'version error'}>{t.version || 'non disponible'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ))}
+        {categories.length === 0 && <p class="muted">Aucun outil ne correspond.</p>}
+      </div>
     </>
   );
 }
 
 export function Home() {
-  const { list, error } = useWorkspaces();
-  const reload = () => workspaceStore.reload();
+  const { list } = useWorkspaces();
+  const versions = useVersions();
 
   return (
     <div class="page">
@@ -150,64 +203,31 @@ export function Home() {
         <ContextBar />
       </TopBar>
       <main class="home">
-        <section aria-labelledby="ws-title">
-          <h2 id="ws-title" class="section-title">Workspaces</h2>
-          {error && <p class="error">{error}</p>}
-          <div class="ws-grid">
-            {list?.map((ws) => <WorkspaceCard ws={ws} key={ws.id} onDeleted={reload} />)}
-            {list?.length === 0 && (
-              <p class="muted empty">
-                Aucun workspace. Un workspace regroupe vos terminaux et VS Code pour un client, un projet ou un
-                environnement, et retrouve sa disposition à chaque connexion.
-              </p>
-            )}
-            <CreateWorkspace onCreated={(id) => { reload(); window.location.hash = `#/w/${id}`; }} />
-          </div>
+        <section class="intro">
+          <h2>Votre poste d'administration Azure et Microsoft 365</h2>
+          <p class="muted">
+            Ouvrez ou créez un workspace dans le menu de gauche : il regroupe vos terminaux PowerShell et Bash et
+            VS Code pour un client, un projet ou un environnement.
+          </p>
+          {list?.length === 0 && (
+            <button type="button" class="button primary" onClick={() => window.dispatchEvent(new CustomEvent(NEW_WORKSPACE_EVENT))}>
+              Créer mon premier workspace
+            </button>
+          )}
         </section>
 
-        <section aria-labelledby="quick-title">
-          <h2 id="quick-title" class="section-title">Accès rapide</h2>
-          <div class="tiles">
-            <a class="tile" href="/term/pwsh/" target="_blank" rel="noopener">
-              <span class="tile-icon pwsh" aria-hidden="true">&gt;_</span>
-              <span class="tile-title">PowerShell</span>
-              <span class="tile-text">Session « pwsh » partagée, hors workspace.</span>
-            </a>
-            <a class="tile" href="/term/bash/" target="_blank" rel="noopener">
-              <span class="tile-icon bash" aria-hidden="true">$_</span>
-              <span class="tile-title">Bash</span>
-              <span class="tile-text">Session « bash » partagée, hors workspace.</span>
-            </a>
-            <a class="tile" href="/code/" target="_blank" rel="noopener">
-              <span class="tile-icon code" aria-hidden="true">{'{ }'}</span>
-              <span class="tile-title">VS Code</span>
-              <span class="tile-text">code-server sur /home/dev.</span>
-            </a>
-          </div>
+        <section aria-labelledby="tools-title">
+          <h2 id="tools-title" class="section-title">Dans chaque workspace</h2>
+          <ToolTiles data={versions} />
+          <Tips />
         </section>
 
-        <div class="columns">
-          <details class="card" open>
-            <summary><h2>Se connecter (device code)</h2></summary>
-            <p class="muted">
-              Les jetons sont conservés dans le volume <code>/home/dev</code>. Dans un workspace, le panneau
-              Connexions (Ctrl+Maj+K) complète ces commandes avec son tenant et les saisit dans un terminal.
-            </p>
-            <dl class="cheatsheet">
-              {connectionCommands().map((c) => (
-                <div key={c.id}>
-                  <dt>{c.label}</dt>
-                  <dd><code>{c.command}</code><CopyButton text={c.command} /></dd>
-                </div>
-              ))}
-            </dl>
-          </details>
-          <details class="card">
-            <summary><h2>Versions des outils</h2></summary>
-            <Versions />
-          </details>
-        </div>
+        <section aria-labelledby="versions-title">
+          <h2 id="versions-title" class="section-title">Outils de l'image</h2>
+          <VersionCards data={versions} />
+        </section>
       </main>
+      <footer class="home-footer">Olivier Malfroidt — VNET Consult — 2026</footer>
     </div>
   );
 }

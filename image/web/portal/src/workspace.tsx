@@ -158,6 +158,11 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
               settingsDialog.current?.close();
               setWs(saved);
               workspaceStore.reload();
+            }}
+            onDeleted={() => {
+              settingsDialog.current?.close();
+              window.location.hash = '#/';
+              workspaceStore.reload();
             }} />
         )}
       </dialog>

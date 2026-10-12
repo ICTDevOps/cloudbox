@@ -14,9 +14,10 @@ const FIELDS: { key: keyof WorkspaceSettings; label: string; placeholder: string
     help: 'PnP PowerShell et CLI for Microsoft 365 (application à enregistrer dans le tenant).' },
 ];
 
-export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
+export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
   ws: Workspace;
   onSaved: (ws: Workspace) => void;
+  onDeleted: () => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(ws.name);
@@ -38,6 +39,22 @@ export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
     try {
       const saved = await api.updateWorkspace(ws.id, { name: name.trim(), env, settings });
       onSaved({ ...ws, name: saved.name, env: saved.env, settings });
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    const ok = window.confirm(
+      `Supprimer le workspace « ${ws.name} » ?\n\nSes sessions de terminal seront fermées.\n` +
+        `Le dossier ${ws.folder} est conservé.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api.deleteWorkspace(ws.id);
+      onDeleted();
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -76,6 +93,13 @@ export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
       <div class="ws-actions">
         <button type="submit" class="button primary" disabled={busy}>Enregistrer</button>
         <button type="button" class="button ghost" onClick={onCancel}>Annuler</button>
+      </div>
+      <div class="danger-zone">
+        <div>
+          <strong>Supprimer ce workspace</strong>
+          <p class="field-help">Ferme ses sessions de terminal ; le dossier de travail est conservé.</p>
+        </div>
+        <button type="button" class="button danger" onClick={remove} disabled={busy}>Supprimer</button>
       </div>
     </form>
   );

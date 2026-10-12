@@ -57,13 +57,27 @@ expect "GET /versions.json" 200 "$(http "${AUTH[@]}" "$BASE/versions.json")"
 expect "GET /term/pwsh/" 200 "$(http "${AUTH[@]}" "$BASE/term/pwsh/")"
 expect "GET /term/bash/" 200 "$(http "${AUTH[@]}" "$BASE/term/bash/")"
 expect "page ttyd personnalisée (menu contextuel)" 1 "$(docker exec "$NAME" curl -s --compressed "${AUTH[@]}" "$BASE/term/pwsh/" | grep -c "Cloudbox : le clic droit va à tmux")"
-# code-server démarre après l'installation des extensions (premier démarrage) : 502 en attendant
+# code-server démarre après l'installation des extensions (premier démarrage) : page d'attente (503)
 for _ in $(seq 1 45); do
     code=$(http -L --max-redirs 5 "${AUTH[@]}" "$BASE/code/")
-    [[ $code == 502 ]] || break
+    [[ $code == 503 ]] || break
     sleep 2
 done
 expect "GET /code/ (redirections suivies)" 200 "$code"
+# code-server arrêté : page d'attente qui se recharge seule, affichable dans le panneau du workspace
+docker exec "$NAME" /command/s6-svc -d /run/service/code-server
+sleep 1
+page=$(docker exec "$NAME" curl -s -D - "${AUTH[@]}" "$BASE/code/?folder=/home/dev" | tr -d '\r')
+grep -q '^HTTP/1.1 503' <<<"$page" && grep -q 'VS Code démarre' <<<"$page" && grep -q 'http-equiv="refresh"' <<<"$page" \
+    && grep -qi '^x-frame-options: SAMEORIGIN' <<<"$page" && ! grep -qi '^server:' <<<"$page" && pass "code-server indisponible : page d'attente (503)" \
+    || fail "code-server indisponible : $(head -c 300 <<<"$page")"
+expect "autre service indisponible : pas de page d'attente" 0 "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/inconnu" | grep -c 'VS Code démarre')"
+docker exec "$NAME" /command/s6-svc -u /run/service/code-server
+for _ in $(seq 1 30); do
+    [[ $(http "${AUTH[@]}" "$BASE/code/healthz") == 200 ]] && break
+    sleep 1
+done
+expect "code-server relancé" 200 "$(http "${AUTH[@]}" "$BASE/code/healthz")"
 expect "GET /code (sans slash, query conservée)" "/code/?folder=/home/dev" \
     "$(docker exec "$NAME" curl -s -o /dev/null -w '%{redirect_url}' "${AUTH[@]}" "$BASE/code?folder=/home/dev" | sed 's#^http://[^/]*##')"
 expect "WebSocket /term/pwsh/ws" "HTTP 101" "$(probe "$BASE/term/pwsh/ws" "$TOKEN" "$BASE" | head -n 1)"

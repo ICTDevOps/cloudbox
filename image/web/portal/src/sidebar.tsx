@@ -1,7 +1,7 @@
 // Barre latérale : accueil, workspaces existants, création, déconnexion. Repliable (mémorisé).
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ENV_LABELS } from './api';
-import { CreateWorkspace } from './home';
+import { CreateWorkspace, NEW_WORKSPACE_EVENT } from './home';
 import { useWorkspaces, workspaceStore } from './store';
 
 const COLLAPSED_KEY = 'cloudbox.sidebar.collapsed';
@@ -26,12 +26,23 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
   const dialog = useRef<HTMLDialogElement>(null);
   const [dialogKey, setDialogKey] = useState(0);
 
+  const openCreate = () => {
+    setDialogKey((k) => k + 1); // formulaire vierge à chaque ouverture
+    dialog.current?.showModal();
+  };
+
   useEffect(() => {
     workspaceStore.reload();
     // Liste rafraîchie au retour sur l'onglet (workspaces créés ou supprimés ailleurs)
     const onFocus = () => workspaceStore.reload();
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    // Bouton « Créer mon premier workspace » de l'accueil
+    const onNew = () => openCreate();
+    window.addEventListener(NEW_WORKSPACE_EVENT, onNew);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener(NEW_WORKSPACE_EVENT, onNew);
+    };
   }, []);
 
   const toggle = () => {
@@ -42,11 +53,6 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
     } catch {
       // stockage indisponible : préférence non mémorisée
     }
-  };
-
-  const openCreate = () => {
-    setDialogKey((k) => k + 1); // formulaire vierge à chaque ouverture
-    dialog.current?.showModal();
   };
 
   return (

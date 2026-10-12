@@ -149,6 +149,27 @@ http://:8080 {
 		file_server
 	}
 
+	# VS Code pas encore prêt (premier démarrage : installation des extensions ; redémarrage) :
+	# page d'attente qui se recharge toutes les 2 s, au lieu d'un « 502 » figé dans le panneau.
+	# orig_uri : handle_path a retiré le préfixe /code du chemin courant.
+	handle_errors 502 {
+		@code expression `{http.request.orig_uri.path}.startsWith("/code/")`
+		handle @code {
+			header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'"
+			header X-Frame-Options "SAMEORIGIN"
+			header Cache-Control "no-store"
+			header -Server
+			root * /srv/portal
+			rewrite * /code-starting.html
+			file_server {
+				status 503
+			}
+		}
+		handle {
+			respond "{err.status_code} {err.status_text}"
+		}
+	}
+
 	handle_errors {
 		respond "{err.status_code} {err.status_text}"
 	}

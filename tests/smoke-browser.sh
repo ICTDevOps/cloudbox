@@ -24,6 +24,12 @@ for _ in $(seq 1 90); do
     sleep 2
 done
 pass "Cloudbox démarré"
+# code-server : prêt une fois les extensions installées (premier démarrage)
+for _ in $(seq 1 90); do
+    [[ $(docker exec "$NAME" curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/code/healthz 2>/dev/null) == 200 ]] && break
+    sleep 2
+done
+pass "code-server prêt"
 
 section "Navigateur"
 docker create --name "$NAME-pw" --network "container:$NAME" -w /work \

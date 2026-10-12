@@ -73,6 +73,7 @@ add IaC "OpenTofu" tofu tofu version
 add IaC "Terraform" terraform terraform version
 
 add "Outils" "GitHub CLI" gh gh --version
+add "Outils" "Bash" bash bash --version
 add "Outils" "git" git git --version
 add "Outils" "yq" yq yq --version
 add "Outils" "jq" jq jq --version
@@ -86,6 +87,17 @@ add_optional "Interface web" "ttyd" ttyd ttyd --version
 if command -v code-server >/dev/null 2>&1; then
     add "Interface web" "code-server" code-server bash -c "code-server --version 2>/dev/null | grep -m 1 -E '^[0-9]+\\.'"
 fi
+# Extensions VS Code préinstallées (archives VSIX de l'image :web, installées au premier démarrage)
+for vsix in /opt/cloudbox/vsix/*.vsix; do
+    [[ -r $vsix ]] || continue
+    IFS='|' read -r ext_id ext_name ext_version < <(unzip -p "$vsix" extension/package.json 2>/dev/null \
+        | jq -r '[.publisher + "." + .name, .displayName // "", .version // ""] | join("|")' 2>/dev/null)
+    ext_id=${ext_id:-$(basename "$vsix" .vsix)}
+    # displayName localisé (« %displayName% ») : on garde l'identifiant
+    [[ -z $ext_name || $ext_name == %* ]] && ext_name=$ext_id
+    [[ -n $ext_version ]] || failed=1
+    rows+=("Extensions VS Code|$ext_name|$ext_id|$ext_version")
+done
 if [[ -r /etc/cloudbox/s6-overlay.version ]]; then
     rows+=("Interface web|s6-overlay|/init|$(cat /etc/cloudbox/s6-overlay.version)")
 fi
