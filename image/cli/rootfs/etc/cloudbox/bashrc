@@ -39,6 +39,28 @@ if [[ -r /usr/lib/git-core/git-sh-prompt ]]; then
     GIT_PS1_SHOWUPSTREAM=auto
 fi
 
+# Badge du workspace (panneaux du portail) : l'environnement est relu dans le fichier du
+# workspace à chaque prompt, il suit donc un changement DEV / ACC / PRD sans rouvrir le shell.
+__cloudbox_workspace() {
+    [[ -n ${CLOUDBOX_WORKSPACE:-} ]] || return 0
+    local env
+    env=$(jq -r '.env // empty' "$HOME/.cloudbox/workspaces/$CLOUDBOX_WORKSPACE.json" 2>/dev/null)
+    case $env in
+        prd) printf '\001\e[1;97;41m\002 PRD %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
+        acc) printf '\001\e[1;30;43m\002 ACC %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
+        dev) printf '\001\e[1;30;42m\002 DEV %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
+        *)   printf '\001\e[7m\002 %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
+    esac
+}
+
+# Contexte réel : abonnement par défaut d'az CLI (lu dans azureProfile.json, sans lancer az)
+__cloudbox_az_ctx() {
+    local profile=${AZURE_CONFIG_DIR:-$HOME/.azure}/azureProfile.json sub
+    [[ -s $profile ]] || return 0
+    sub=$(jq -r 'first(.subscriptions[]? | select(.isDefault) | .name) // empty' "$profile" 2>/dev/null)
+    [[ -n $sub ]] && printf ' \001\e[94m\002az:%s\001\e[0m\002' "$sub"
+}
+
 __cloudbox_kube_ctx() {
     local cfg=${KUBECONFIG:-$HOME/.kube/config}
     cfg=${cfg%%:*}
@@ -54,6 +76,6 @@ __cloudbox_prompt() {
     declare -F __git_ps1 >/dev/null && git=$(__git_ps1 ' \001\e[33m\002(%s)\001\e[0m\002')
     local mark='\[\e[32m\]$\[\e[0m\]'
     (( rc != 0 )) && mark='\[\e[31m\]$\[\e[0m\]'
-    PS1="\[\e[36m\]\u@\h\[\e[0m\] \[\e[34m\]\w\[\e[0m\]${git}$(__cloudbox_kube_ctx)\n${mark} "
+    PS1="$(__cloudbox_workspace)\[\e[36m\]\u@\h\[\e[0m\] \[\e[34m\]\w\[\e[0m\]${git}$(__cloudbox_az_ctx)$(__cloudbox_kube_ctx)\n${mark} "
 }
 PROMPT_COMMAND=__cloudbox_prompt
