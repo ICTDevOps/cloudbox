@@ -23,7 +23,8 @@ L'accès terminal classique (`docker exec`, profil Windows Terminal) reste possi
 - **Pas de serveur central, pas de multi-utilisateur, pas d'exposition réseau** dans cette phase.
   Ne pas introduire de dépendance à Azure (ACA, Easy Auth, Azure Files) ni d'oauth2-proxy.
 - Postes cibles principaux : Windows 11 + Docker Desktop (WSL2). Linux et macOS doivent
-  fonctionner aussi (image multi-arch amd64 + arm64).
+  fonctionner aussi. Image **amd64 uniquement** (choix assumé : pas de besoin arm64 ; les
+  Dockerfile gardent la gestion d'arm64 pour pouvoir la réactiver dans le workflow).
 
 ## Ce qu'on reprend de WSLC (les principes, pas le code)
 
@@ -40,7 +41,7 @@ L'accès terminal classique (`docker exec`, profil Windows Terminal) reste possi
   `# renovate: datasource=… depName=…`. Ne jamais installer un outil en « latest ».
 - **Renovate** : une PR par outil, `minimumReleaseAge` de 3 jours, fusion automatique des
   patch/minor si le build est vert, revue manuelle des majeures.
-- **CI GitHub Actions** : build amd64 + arm64 sur runners natifs, test de fumée qui bloque la PR,
+- **CI GitHub Actions** : build amd64, test de fumée qui bloque la PR,
   publication sur GHCR, release GitHub avec `versions.json`.
 - **`/home/dev` en volume persistant** : jetons, `~/.azure`, clés SSH, modules `CurrentUser`
   survivent à la recréation du container.
@@ -71,7 +72,7 @@ App Registrations, Key Vault et les connexions PowerShell par certificat.
 
 ## Outils complémentaires (binaires épinglés, image `:cli`)
 
-Installés depuis les releases officielles (binaire ou archive, variante amd64 / arm64), **épinglés
+Installés depuis les releases officielles (binaire ou archive, variante amd64 ; garder la sélection d'architecture dans les Dockerfile), **épinglés
 et suivis par Renovate** exactement comme az, kubectl ou helm : `ARG` + commentaire
 `# renovate:`, une PR par outil, fusion automatique des patch/minor si le build est vert.
 

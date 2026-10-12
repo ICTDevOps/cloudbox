@@ -1,4 +1,4 @@
-# Build des images :cli et :web (amd64 + arm64 sur runners natifs), test de fumée,
+# Build des images :cli et :web (amd64 uniquement), test de fumée,
 # publication sur GHCR et release GitHub avec versions.json.
 #
 #   pull_request        build + test de fumée (bloque la PR, y compris les PR Renovate)
@@ -30,10 +30,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # amd64 uniquement : les postes cibles sont des PC Windows / Linux x86-64.
+          # Pour réactiver arm64 (Mac Apple Silicon) : ajouter « - arch: arm64 / runner: ubuntu-24.04-arm »,
+          # la source arm64 dans « Manifestes et tags », versions-arm64.json dans la release,
+          # et le check « build (arm64) » dans la protection de main. Les Dockerfile gèrent déjà arm64.
           - arch: amd64
             runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -115,7 +117,7 @@ jobs:
           done
 
   publish:
-    name: publication multi-arch
+    name: publication
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
@@ -133,7 +135,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Manifestes multi-arch et tags
+      - name: Manifestes et tags
         id: tags
         run: |
           img=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox
@@ -150,7 +152,7 @@ jobs:
               [[ $v == web ]] && tags+=(-t "$img:latest")
             fi
             docker buildx imagetools create "${tags[@]}" \
-              "$img:build-${GITHUB_SHA}-$v-amd64" "$img:build-${GITHUB_SHA}-$v-arm64"
+              "$img:build-${GITHUB_SHA}-$v-amd64"
           done
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -165,7 +167,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tags.outputs.date }}
         run: |
-          jq -s '{amd64: .[0], arm64: .[1]}' versions-amd64.json versions-arm64.json > versions.json
+          jq -s '{amd64: .[0]}' versions-amd64.json > versions.json
           {
             echo "Images :"
             echo

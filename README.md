@@ -204,7 +204,7 @@ own infrastructure is allowed. OpenTofu (MPL 2.0) is installed alongside.
 | `:sha-<commit>-web`, `:sha-<commit>-cli` | Build of a given commit |
 
 Every tool is pinned (`ARG <TOOL>_VERSION` + `# renovate:` comment). Renovate opens one PR per
-tool after 3 days of availability; the workflow builds amd64 and arm64 and runs the smoke tests;
+tool after 3 days of availability; the workflow builds the amd64 image and runs the smoke tests;
 patch/minor updates are merged automatically when everything is green, major ones wait for a
 review. Automatic merging requires the protection of `main` to require the `build` workflow
 status.
