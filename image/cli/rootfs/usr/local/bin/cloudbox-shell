@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Ouvre le shell choisi par CLOUDBOX_SHELL (pwsh par défaut, ou bash).
+#   docker exec -it cloudbox cloudbox-shell
+case "${CLOUDBOX_SHELL:-pwsh}" in
+    bash) exec bash -l "$@" ;;
+    pwsh|powershell) exec pwsh -NoLogo -Login "$@" ;;
+    *) echo "CLOUDBOX_SHELL inconnu : '$CLOUDBOX_SHELL' (attendu : pwsh ou bash)" >&2; exec bash -l "$@" ;;
+esac

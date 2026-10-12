@@ -1,0 +1,59 @@
+# Configuration Bash de Cloudbox, chargée par ~/.bashrc.
+# Fournie par l'image : elle évolue avec les mises à jour sans toucher au ~/.bashrc de l'utilisateur.
+
+# Shell non interactif : rien à faire
+[[ $- == *i* ]] || return 0
+
+# Historique
+HISTCONTROL=ignoreboth
+HISTSIZE=50000
+HISTFILESIZE=100000
+shopt -s histappend checkwinsize globstar 2>/dev/null
+
+# Complétion (az, kubectl, helm, gh, tofu, terraform, k9s, yq…)
+if [[ -r /usr/share/bash-completion/bash_completion ]] && ! shopt -oq posix; then
+    . /usr/share/bash-completion/bash_completion
+fi
+
+# fzf : Ctrl-R (historique), Ctrl-T (fichiers)
+[[ -r /usr/share/doc/fzf/examples/key-bindings.bash ]] && . /usr/share/doc/fzf/examples/key-bindings.bash
+
+# Couleurs et alias courants
+export LESS='-R -F -X'
+alias ls='ls --color=auto'
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias grep='grep --color=auto'
+alias bat='batcat'
+alias k='kubectl'
+alias kctx='kubectx'
+alias kns='kubens'
+alias tf='terraform'
+complete -o default -F __start_kubectl k 2>/dev/null
+
+# Prompt : utilisateur@hôte, dossier, branche git, contexte Kubernetes
+if [[ -r /usr/lib/git-core/git-sh-prompt ]]; then
+    . /usr/lib/git-core/git-sh-prompt
+    GIT_PS1_SHOWDIRTYSTATE=1
+    GIT_PS1_SHOWUPSTREAM=auto
+fi
+
+__cloudbox_kube_ctx() {
+    local cfg=${KUBECONFIG:-$HOME/.kube/config}
+    cfg=${cfg%%:*}
+    [[ -r $cfg ]] || return 0
+    local ctx
+    ctx=$(sed -n 's/^current-context:[[:space:]]*//p' "$cfg" 2>/dev/null | tr -d '"')
+    [[ -n $ctx ]] && printf ' \001\e[35m\002⎈ %s\001\e[0m\002' "$ctx"
+}
+
+__cloudbox_prompt() {
+    local rc=$?
+    local git=''
+    declare -F __git_ps1 >/dev/null && git=$(__git_ps1 ' \001\e[33m\002(%s)\001\e[0m\002')
+    local mark='\[\e[32m\]$\[\e[0m\]'
+    (( rc != 0 )) && mark='\[\e[31m\]$\[\e[0m\]'
+    PS1="\[\e[36m\]\u@\h\[\e[0m\] \[\e[34m\]\w\[\e[0m\]${git}$(__cloudbox_kube_ctx)\n${mark} "
+}
+PROMPT_COMMAND=__cloudbox_prompt

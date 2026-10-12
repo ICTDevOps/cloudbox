@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Configuration root du container, autorisée pour dev via /etc/sudoers.d/cloudbox.
+# Elle ne s'exécute qu'une fois par container : l'état est marqué dans /var/lib/cloudbox
+# (hors volume, donc remis à zéro quand le container est recréé).
+#
+# CLOUDBOX_SUDO est lu dans l'environnement du PID 1 (fixé à la création du container),
+# pas dans celui de l'appelant : dev ne peut pas s'accorder sudo en changeant sa variable.
+set -euo pipefail
+umask 022
+
+state=/var/lib/cloudbox/root-init.done
+[[ -e $state ]] && exit 0
+
+# Sans CAP_SYS_PTRACE (retirée par Docker), root ne peut pas lire l'environnement d'un processus
+# d'un autre utilisateur : la lecture se fait avec l'uid du PID 1 (dev).
+pid1_env() {
+    setpriv --reuid="$(stat -c %u /proc/1)" --regid="$(stat -c %g /proc/1)" --clear-groups \
+        cat /proc/1/environ | tr '\0' '\n' | sed -n "s/^$1=//p" | tail -n 1
+}
+
+sudo_flag=$(pid1_env CLOUDBOX_SUDO)
+case "${sudo_flag,,}" in
+    true|1|yes|on)
+        echo 'dev ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/cloudbox-dev
+        chmod 0440 /etc/sudoers.d/cloudbox-dev
+        echo "[cloudbox-init] sudo activé pour dev (CLOUDBOX_SUDO=$sudo_flag)" >&2
+        ;;
+    *)
+        rm -f /etc/sudoers.d/cloudbox-dev
+        ;;
+esac
+
+# Un bind mount ou un volume créé vide appartient à root : on rend le home à dev (non récursif).
+if [[ $(stat -c %u /home/dev) != 1000 ]]; then
+    chown 1000:1000 /home/dev
+fi
+
+install -d -m 0755 /var/lib/cloudbox
+date -u +%Y-%m-%dT%H:%M:%SZ > "$state"
