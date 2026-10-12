@@ -19,7 +19,8 @@
       "description": "Versions épinglées par un commentaire « # renovate: » au-dessus d'une ligne ARG <OUTIL>_VERSION (Dockerfile) ou <OUTIL>_VERSION= (scripts de test)",
       "managerFilePatterns": [
         "/(^|/)Dockerfile$/",
-        "/^tests/.+\\.sh$/"
+        "/^tests/.+\\.sh$/",
+        "/^docs/screenshots/.+\\.sh$/"
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?(?: versioning=(?<versioning>\\S+))?\\s+(?:ARG )?[A-Z0-9_]+=(?<currentValue>\\S+)"
