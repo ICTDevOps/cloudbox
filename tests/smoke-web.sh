@@ -207,7 +207,8 @@ docker run -d --name "$NAME-gen" "$IMAGE" >/dev/null
 if wait_healthy "$NAME-gen"; then
     gen=$(docker exec "$NAME-gen" cat /home/dev/.cloudbox/token)
     [[ $gen =~ ^[0-9a-f]{64}$ ]] && pass "jeton généré (64 caractères hexadécimaux)" || fail "jeton généré invalide"
-    docker logs "$NAME-gen" 2>&1 | grep -q "Jeton d'accès : $gen" && pass "jeton affiché dans les logs" || fail "jeton absent des logs"
+    # grep sans -q : avec pipefail, -q s'arrête au premier résultat et docker logs reçoit SIGPIPE
+    docker logs "$NAME-gen" 2>&1 | grep "Jeton d'accès : $gen" >/dev/null && pass "jeton affiché dans les logs" || fail "jeton absent des logs"
     expect "perms du fichier jeton" "600" "$(docker exec "$NAME-gen" stat -c %a /home/dev/.cloudbox/token)"
     expect "GET / avec le jeton généré" 200 "$(docker exec "$NAME-gen" curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $gen" "$BASE/")"
 else
