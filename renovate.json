@@ -86,6 +86,19 @@
       "groupName": "dockview"
     },
     {
+      "description": "Nouvelle LTS d'Ubuntu (24.04 → 26.04…) : migration manuelle (paquets renommés comme libicu, dépôt azure-cli par version d'Ubuntu, prise en charge par Microsoft). Le digest de la LTS actuelle reste suivi",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ubuntu"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
       "description": "L'image :web part de l'image :cli construite dans le même workflow",
       "matchDatasources": [
         "docker"
