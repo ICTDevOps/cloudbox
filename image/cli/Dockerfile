@@ -3,7 +3,8 @@
 # Outils d'administration Azure / Microsoft 365, sans interface web.
 # Chaque outil est épinglé (ARG + commentaire Renovate) ; ne jamais installer en « latest ».
 
-FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+# Changement de LTS : manuel (règle Renovate). Les noms de paquets ci-dessous (libicu<N>) en dépendent.
+FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 
 ARG TARGETARCH
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -37,12 +38,12 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       bash bash-completion tmux less vim nano tree fzf ripgrep bat htop \
       openssl ca-certificates gnupg \
-      curl wget dnsutils iputils-ping traceroute mtr-tiny netcat-openbsd whois iproute2 openssh-client \
+      curl wget bind9-dnsutils iputils-ping traceroute mtr-tiny netcat-openbsd whois iproute2 openssh-client \
       jq unzip zip rsync \
       git git-lfs python3 python3-pip pipx make \
       sudo tzdata locales \
       # Dépendances : PowerShell (ICU, Kerberos), archives xz/bz2, man minimal
-      libicu74 libgssapi-krb5-2 xz-utils bzip2 apt-transport-https lsb-release \
+      libicu78 libgssapi-krb5-2 xz-utils bzip2 apt-transport-https lsb-release \
  && sed -i -e 's/^# *\(en_US.UTF-8\)/\1/' -e 's/^# *\(fr_FR.UTF-8\)/\1/' /etc/locale.gen \
  && locale-gen \
  && ln -s /usr/bin/batcat /usr/local/bin/bat \
@@ -52,15 +53,16 @@ RUN apt-get update \
 RUN userdel -r ubuntu 2>/dev/null || true \
  && useradd --create-home --uid 1000 --user-group --shell /bin/bash dev
 
-# --- Azure CLI (dépôt apt Microsoft, amd64 + arm64) ---
+# --- Azure CLI (dépôt apt Microsoft par version d'Ubuntu, amd64 + arm64) ---
 # renovate: datasource=github-releases depName=Azure/azure-cli extractVersion=^azure-cli-(?<version>.+)$
 ARG AZURE_CLI_VERSION=2.91.0
-RUN install -d -m 0755 /etc/apt/keyrings \
+RUN . /etc/os-release \
+ && install -d -m 0755 /etc/apt/keyrings \
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
- && echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ noble main" \
+ && echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ ${VERSION_CODENAME} main" \
       > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update \
- && apt-get install -y --no-install-recommends "azure-cli=${AZURE_CLI_VERSION}-1~noble" \
+ && apt-get install -y --no-install-recommends "azure-cli=${AZURE_CLI_VERSION}-1~${VERSION_CODENAME}" \
  && apt-mark hold azure-cli \
  && rm -rf /var/lib/apt/lists/*
 

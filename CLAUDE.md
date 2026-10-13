@@ -60,7 +60,7 @@ Paquets Ubuntu à installer (suivis par l'`apt upgrade` du build hebdomadaire, p
 |---|---|
 | Shell et confort | `bash`, `bash-completion`, `tmux`, `less`, `vim`, `nano`, `tree`, `fzf`, `ripgrep`, `bat`, `htop` |
 | Certificats et crypto | `openssl`, `ca-certificates`, `gnupg` |
-| Réseau | `curl`, `wget`, `dnsutils` (dig, nslookup), `iputils-ping`, `traceroute`, `mtr-tiny`, `netcat-openbsd`, `whois`, `iproute2`, `openssh-client` |
+| Réseau | `curl`, `wget`, `bind9-dnsutils` (dig, nslookup), `iputils-ping`, `traceroute`, `mtr-tiny`, `netcat-openbsd`, `whois`, `iproute2`, `openssh-client` |
 | Données | `jq`, `unzip`, `zip`, `rsync` (yq : voir « Outils complémentaires ») |
 | Dev | `git`, `git-lfs`, `python3`, `python3-pip`, `pipx`, `make` |
 | Système | `sudo`, `tzdata`, `locales` |
@@ -311,5 +311,7 @@ l'isolation par workspace suffit : pas d'authentification Entra ID devant `local
   messages d'erreur de `cloudbox-api` sont donnés dans les deux langues (`Accept-Language`).
 - Chaque outil ajouté : `ARG` épinglé + commentaire Renovate + entrée dans `cloudbox-versions`
   + vérification dans le test de fumée.
+- Image de base : Ubuntu 26.04 LTS. Renovate suit son digest, mais pas le passage à la LTS
+  suivante : migration manuelle (noms de paquets comme `libicu<N>`, dépôt azure-cli de la version).
 - Ne jamais écrire un numéro de version de mémoire : vérifier la dernière version stable
   (release GitHub, registre) au moment de l'ajout.
