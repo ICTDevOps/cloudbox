@@ -1,11 +1,15 @@
 # Build des images :cli et :web (amd64 uniquement), test de fumée,
-# publication sur GHCR et release GitHub avec versions.json.
+# publication sur GHCR et release GitHub (versions.json, packages.txt).
 #
 #   pull_request        build + test de fumée (bloque la PR, y compris les PR Renovate)
-#   push sur main       build + test + publication :edge et :sha-…
-#   schedule (lundi)    rebuild sans cache (apt upgrade) + publication :cli, :web, :latest,
-#                       :vAAAA.MM.JJ-cli, :vAAAA.MM.JJ-web + release GitHub
+#   push sur main       build + test + publication :edge et :sha-…, puis release si l'image a
+#                       changé depuis la précédente : tag vAAAA.MM.JJ (puis .2, .3… le même jour),
+#                       publication :cli, :web, :latest, :<tag>-cli, :<tag>-web
+#   schedule (lundi)    rebuild sans cache (apt upgrade), puis comme push sur main
 #   workflow_dispatch   comme schedule
+#
+# « L'image a changé » : version d'un outil, paquet Ubuntu, ou commit qui touche image/
+# (.github/scripts/release-notes.py, qui rédige aussi la description de la release).
 name: build
 
 on:
@@ -91,13 +95,20 @@ jobs:
           path: tests/browser-out/
           if-no-files-found: ignore
 
-      - name: Versions des outils
-        run: docker run --rm cloudbox:web cloudbox-versions --json > "versions-${{ matrix.arch }}.json"
+      # --entrypoint : sans s6, dont les messages (bandeau, Caddy) iraient dans le fichier
+      - name: Versions des outils et paquets Ubuntu
+        run: |
+          docker run --rm --entrypoint cloudbox-versions cloudbox:web --json > "versions-${{ matrix.arch }}.json"
+          jq -e '.tools | length > 0' "versions-${{ matrix.arch }}.json" >/dev/null
+          docker run --rm --entrypoint dpkg-query cloudbox:web -W -f '${Package}\t${Version}\n' \
+            | sort > "packages-${{ matrix.arch }}.txt"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: versions-${{ matrix.arch }}
-          path: versions-${{ matrix.arch }}.json
+          path: |
+            versions-${{ matrix.arch }}.json
+            packages-${{ matrix.arch }}.txt
 
       - name: Connexion à GHCR
         if: env.PUBLISH == 'true'
@@ -116,6 +127,7 @@ jobs:
             docker push "$img:build-${GITHUB_SHA}-$v-${{ matrix.arch }}"
           done
 
+
   publish:
     name: publication
     needs: build
@@ -125,8 +137,13 @@ jobs:
       contents: write
       packages: write
     env:
-      STABLE: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # Historique complet : commits qui touchent image/ depuis la release précédente
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -135,53 +152,72 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Manifestes et tags
-        id: tags
+      - name: Nom de l'image
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox" >> "$GITHUB_OUTPUT"
+
+      - name: Manifestes :edge et :sha-…
         run: |
-          img=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox
-          short=${GITHUB_SHA::7}
-          date=v$(date -u +%Y.%m.%d)
-          echo "date=$date" >> "$GITHUB_OUTPUT"
+          img=${{ steps.image.outputs.name }}
           for v in cli web; do
-            tags=(-t "$img:sha-$short-$v")
-            if [[ $v == web ]]; then
-              tags+=(-t "$img:edge")
-            fi
-            if [[ $STABLE == true ]]; then
-              tags+=(-t "$img:$v" -t "$img:$date-$v")
-              [[ $v == web ]] && tags+=(-t "$img:latest")
-            fi
-            docker buildx imagetools create "${tags[@]}" \
-              "$img:build-${GITHUB_SHA}-$v-amd64"
+            tags=(-t "$img:sha-${GITHUB_SHA::7}-$v")
+            [[ $v == web ]] && tags+=(-t "$img:edge")
+            docker buildx imagetools create "${tags[@]}" "$img:build-${GITHUB_SHA}-$v-amd64"
           done
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: env.STABLE == 'true'
         with:
           pattern: versions-*
           merge-multiple: true
 
+      - name: Release précédente et tag de la nouvelle
+        id: release
+        run: |
+          prev=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          mkdir -p prev
+          if [[ -n $prev ]]; then
+            gh release download "$prev" -D prev -p versions.json -p packages.txt || true
+            # versions.json de la release : { "amd64": <sortie de cloudbox-versions --json> }
+            [[ -f prev/versions.json ]] && jq '.amd64' prev/versions.json > prev/v.json && mv prev/v.json prev/versions.json
+            git log --no-merges --format='%s' "$prev..$GITHUB_SHA" -- image/ > commits.txt
+          else
+            : > commits.txt
+          fi
+          base=v$(date -u +%Y.%m.%d)
+          tag=$base n=1
+          while git rev-parse -q --verify "refs/tags/$tag" >/dev/null || gh release view "$tag" >/dev/null 2>&1; do
+            n=$((n + 1)) tag=$base.$n
+          done
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Description de la release
+        id: notes
+        run: |
+          python3 .github/scripts/release-notes.py \
+            --tag "${{ steps.release.outputs.tag }}" --image "${{ steps.image.outputs.name }}" \
+            --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --versions versions-amd64.json --packages packages-amd64.txt --commits commits.txt \
+            --prev-tag "${{ steps.release.outputs.prev }}" --prev-dir prev --out notes.md >> "$GITHUB_OUTPUT"
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tags stables (:cli, :web, :latest, :<tag>-…)
+        if: steps.notes.outputs.changed == 'true'
+        run: |
+          img=${{ steps.image.outputs.name }}
+          tag=${{ steps.release.outputs.tag }}
+          for v in cli web; do
+            tags=(-t "$img:$v" -t "$img:$tag-$v")
+            [[ $v == web ]] && tags+=(-t "$img:latest")
+            docker buildx imagetools create "${tags[@]}" "$img:build-${GITHUB_SHA}-$v-amd64"
+          done
+
       - name: Release GitHub
-        if: env.STABLE == 'true'
+        if: steps.notes.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tags.outputs.date }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
           jq -s '{amd64: .[0]}' versions-amd64.json > versions.json
-          {
-            echo "Images :"
-            echo
-            echo "- \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox:$TAG-web\` (= \`:web\`, \`:latest\`)"
-            echo "- \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cloudbox:$TAG-cli\` (= \`:cli\`)"
-            echo
-            echo "| Outil | Version |"
-            echo "|---|---|"
-            jq -r '.tools[] | "| \(.name) | \(.version) |"' versions-amd64.json
-          } > notes.md
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" versions.json --clobber --repo "$GITHUB_REPOSITORY"
-            gh release edit "$TAG" --notes-file notes.md --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$TAG" versions.json --title "Cloudbox $TAG" --notes-file notes.md \
-              --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
-          fi
+          cp packages-amd64.txt packages.txt
+          gh release create "$TAG" versions.json packages.txt --title "Cloudbox $TAG" \
+            --notes-file notes.md --target "$GITHUB_SHA"

@@ -111,6 +111,11 @@ image/web/Dockerfile   → ghcr.io/<owner>/cloudbox:web   (FROM :cli + stack web
 - `:cli` reste utilisable seul, y compris avec wslc (mode `sleep infinity`).
 - `:web` est reconstruite à chaque changement de `:cli`.
 - Tags : `:cli`, `:web`, `:latest` (= `:web`), `:vAAAA.MM.JJ-cli`, `:vAAAA.MM.JJ-web`, `:edge`, `:sha-…`.
+- Release GitHub `vAAAA.MM.JJ` (puis `.2`, `.3`… le même jour) à chaque fusion sur `main` qui change
+  l'image (version d'un outil, paquet Ubuntu, commit dans `image/`), et au rebuild du lundi seulement
+  si quelque chose a changé. Elle déplace `:cli`, `:web`, `:latest` ; sa description (en anglais,
+  `.github/scripts/release-notes.py`) liste les outils mis à jour (avant / après), les commits de
+  l'image, les paquets Ubuntu mis à jour et toutes les versions.
 
 ### Contenu de l'image `:web`
 

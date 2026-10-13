@@ -65,10 +65,10 @@ ghcr.io/ictdevops/cloudbox:web
 
 | Tag | When to use it |
 |---|---|
-| `:web` / `:latest` | Recommended: full image, rebuilt every week |
-| `:edge` | Follows `main` commit by commit (latest tool updates, less tested) |
+| `:web` / `:latest` | Recommended: full image, latest release |
+| `:edge` | Follows `main` commit by commit, including changes that do not touch the image |
 | `:cli` | Tools only, no web interface (`docker exec`, wslc) |
-| `:vYYYY.MM.DD-web` | A fixed weekly build, to pin a version |
+| `:vYYYY.MM.DD-web` | A given release, to pin a version (see [Releases](https://github.com/ICTDevOps/cloudbox/releases)) |
 
 > **Always publish the port on `127.0.0.1`**, as in the examples below. The web terminal holds
 > your Azure and Microsoft 365 sign-ins: it must only be reachable from your own PC, never from
@@ -333,9 +333,9 @@ own infrastructure is allowed. OpenTofu (MPL 2.0) is installed alongside.
 
 | Tag | Content |
 |---|---|
-| `:web`, `:latest` | Full image (weekly build) |
-| `:cli` | Tools only, without the web interface (wslc / `docker exec`) |
-| `:vYYYY.MM.DD-web`, `:vYYYY.MM.DD-cli` | Dated weekly build |
+| `:web`, `:latest` | Full image, latest release |
+| `:cli` | Tools only, without the web interface (wslc / `docker exec`), latest release |
+| `:vYYYY.MM.DD[.N]-web`, `:vYYYY.MM.DD[.N]-cli` | A given release (`.2`, `.3`… for later releases the same day) |
 | `:edge` | Latest commit on `main` |
 | `:sha-<commit>-web`, `:sha-<commit>-cli` | Build of a given commit |
 
@@ -345,9 +345,13 @@ patch/minor updates are merged automatically when everything is green, major one
 review. Automatic merging requires the protection of `main` to require the `build` workflow
 status.
 
-Updates merged by Renovate during the week are published right away under `:edge`; they reach
-`:web` and `:latest` with the weekly build (Monday, 04:00 UTC). Use `:edge` to follow `main` as
-it moves, `:web` for a version that changes once a week.
+Every merge on `main` that changes the image (a tool version, an Ubuntu package or the image
+sources) publishes a **GitHub release** `vYYYY.MM.DD` (`.2`, `.3`… for later ones the same day)
+and moves `:web`, `:cli` and `:latest` to it. Its description lists the updated tools (before /
+after), the image changes, the updated Ubuntu packages and every version; `versions.json` and
+`packages.txt` are attached. The Monday rebuild (04:00 UTC, without cache, for Ubuntu security
+updates) publishes a release only when something changed. `:edge` follows every commit on
+`main`.
 
 ## Origin
 
