@@ -16,7 +16,10 @@ import {
   themeDark,
   themeLight,
   type DockviewApi,
+  type DockviewGroupPanel,
   type GroupPanelPartInitParameters,
+  type IGroupHeaderProps,
+  type IHeaderActionsRenderer,
   type IContentRenderer,
   type ITabRenderer,
   type TabPartInitParameters,
@@ -24,6 +27,7 @@ import {
 import 'dockview/dist/styles/dockview.css';
 import { api, type PanelKind, type Workspace } from './api';
 import { t } from './i18n';
+import { iconElement, type IconName } from './icons';
 import { PathBar, TerminalWatcher } from './pathbar';
 import { isDark, onThemeChange } from './prefs';
 
@@ -36,8 +40,12 @@ interface PanelParams {
 }
 
 const TITLES: Record<PanelKind, string> = { pwsh: 'PowerShell', bash: 'Bash', code: 'VS Code', assistant: 'Assistant' };
-const ICONS: Record<PanelKind, string> = { pwsh: '>_', bash: '$_', code: '{ }', assistant: '✦' };
+const ICONS: Record<PanelKind, IconName> = { pwsh: 'pwsh', bash: 'bash', code: 'code', assistant: 'sparkle' };
 const SAVE_DELAY_MS = 600;
+// Thèmes Dockview : groupes espacés (cartes) ; les couleurs viennent des variables du portail (styles.css)
+const DARK = { ...themeDark, gap: 8 };
+const LIGHT = { ...themeLight, gap: 8 };
+const dockTheme = () => (isDark() ? DARK : LIGHT);
 // Raccourci du panneau Connexions, émis aussi depuis les terminaux (qui ont le focus clavier)
 export const CONNECTIONS_EVENT = 'cloudbox:connections';
 
@@ -158,7 +166,7 @@ class ClosableTab implements ITabRenderer {
     const p = parameters.params as unknown as PanelParams;
     const icon = document.createElement('span');
     icon.className = `cb-tab-icon ${p.kind}`;
-    icon.textContent = ICONS[p.kind];
+    icon.append(iconElement(ICONS[p.kind], 16));
     const label = document.createElement('span');
     label.className = 'cb-tab-label';
     label.textContent = panelTitle(p);
@@ -167,7 +175,7 @@ class ClosableTab implements ITabRenderer {
     close.className = 'cb-tab-close';
     close.title = p.kind === 'code' ? t().dock.closeCode : p.kind === 'assistant' ? t().dock.closeAssistant : t().dock.closeTerminal;
     close.setAttribute('aria-label', close.title);
-    close.textContent = '×';
+    close.append(iconElement('close', 14));
     // Ne pas déclencher le glisser-déposer de l'onglet
     close.addEventListener('pointerdown', (e) => e.stopPropagation());
     close.addEventListener('click', (e) => {
@@ -175,6 +183,107 @@ class ClosableTab implements ITabRenderer {
       this.onClose(parameters);
     });
     this.element.append(icon, label, close);
+  }
+}
+
+// Adresse d'un panneau ouvert seul dans un onglet du navigateur (même session tmux pour un terminal)
+function standaloneUrl(ws: Workspace, p: PanelParams): string | null {
+  if (isTerminal(p.kind)) return `/term/${p.kind}/?arg=${ws.id}~${p.n}`;
+  if (p.kind === 'code') return `/code/?folder=${encodeURIComponent(ws.folder)}`;
+  return null;
+}
+
+function actionButton(icon: IconName, title: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'cb-group-action';
+  b.title = title;
+  b.setAttribute('aria-label', title);
+  b.append(iconElement(icon, 16));
+  b.addEventListener('pointerdown', (e) => e.stopPropagation());
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return b;
+}
+
+// Après les onglets d'un groupe : « + » ajoute un terminal du même type que l'onglet actif, dans ce groupe
+class AddInGroupAction implements IHeaderActionsRenderer {
+  readonly element = document.createElement('div');
+  private readonly addInGroup: (kind: TerminalKind, group: DockviewGroupPanel) => void;
+  private disposables: { dispose(): void }[] = [];
+
+  constructor(addInGroup: (kind: TerminalKind, group: DockviewGroupPanel) => void) {
+    this.addInGroup = addInGroup;
+    this.element.className = 'cb-group-actions left';
+  }
+
+  init(params: IGroupHeaderProps): void {
+    const group = params.group as DockviewGroupPanel;
+    const button = actionButton('plus', '', () => {
+      const kind = (group.activePanel?.params as PanelParams | undefined)?.kind;
+      if (kind && isTerminal(kind)) this.addInGroup(kind, group);
+    });
+    const update = () => {
+      const kind = (group.activePanel?.params as PanelParams | undefined)?.kind;
+      button.hidden = !kind || !isTerminal(kind);
+      if (kind && isTerminal(kind)) {
+        button.title = t().dock.addHere(TITLES[kind]);
+        button.setAttribute('aria-label', button.title);
+      }
+    };
+    update();
+    this.disposables.push(params.api.onDidActivePanelChange(update));
+    this.element.append(button);
+  }
+
+  dispose(): void {
+    this.disposables.forEach((d) => d.dispose());
+  }
+}
+
+// À droite d'un groupe : ouvrir dans un onglet du navigateur, agrandir / restaurer
+class GroupRightActions implements IHeaderActionsRenderer {
+  readonly element = document.createElement('div');
+  private readonly ws: Workspace;
+  private disposables: { dispose(): void }[] = [];
+
+  constructor(ws: Workspace) {
+    this.ws = ws;
+    this.element.className = 'cb-group-actions right';
+  }
+
+  init(params: IGroupHeaderProps): void {
+    const group = params.group as DockviewGroupPanel;
+    const popout = actionButton('external', t().dock.openTab, () => {
+      const p = group.activePanel?.params as PanelParams | undefined;
+      const url = p && standaloneUrl(this.ws, p);
+      if (url) window.open(url, '_blank', 'noopener');
+    });
+    const maximize = actionButton('maximize', '', () => {
+      if (params.api.isMaximized()) params.api.exitMaximized();
+      else params.api.maximize();
+      update();
+    });
+    const update = () => {
+      const p = group.activePanel?.params as PanelParams | undefined;
+      popout.hidden = !p || !standaloneUrl(this.ws, p);
+      const max = params.api.isMaximized();
+      maximize.title = max ? t().dock.restore : t().dock.maximize;
+      maximize.setAttribute('aria-label', maximize.title);
+      maximize.replaceChildren(iconElement(max ? 'restore' : 'maximize', 16));
+    };
+    update();
+    this.disposables.push(
+      params.api.onDidActivePanelChange(update),
+      params.containerApi.onDidMaximizedGroupChange(update),
+    );
+    this.element.append(popout, maximize);
+  }
+
+  dispose(): void {
+    this.disposables.forEach((d) => d.dispose());
   }
 }
 
@@ -249,10 +358,16 @@ export function mountDock(
   };
 
   const dockApi: DockviewApi = createDockview(root, {
-    theme: isDark() ? themeDark : themeLight,
+    theme: dockTheme(),
     createComponent: (options) =>
       options.name === 'assistant' ? new AssistantPanel(renderAssistant) : new FramePanel(ws, (id) => touch(id), watcher, (id) => handle.focusPanel(id), onError),
     createTabComponent: () => new ClosableTab(closePanel),
+    createLeftHeaderActionComponent: () => new AddInGroupAction((kind, group) => {
+      add(kind, { referenceGroup: group })
+        .then(() => save())
+        .catch((err: Error) => onError(err.message));
+    }),
+    createRightHeaderActionComponent: () => new GroupRightActions(ws),
     defaultTabComponent: 'cloudbox-tab',
     // Les iframes ne doivent pas être déplacées dans le DOM (elles se rechargeraient)
     defaultRenderer: 'always',
@@ -267,7 +382,7 @@ export function mountDock(
     }, SAVE_DELAY_MS);
   };
 
-  const add = async (kind: PanelKind, position?: { referencePanel: string; direction: 'right' | 'below' }) => {
+  const add = async (kind: PanelKind, position?: { referencePanel: string; direction: 'right' | 'below' } | { referenceGroup: DockviewGroupPanel }) => {
     const params: PanelParams = isTerminal(kind) ? { kind, n: await api.allocatePanel(ws.id) } : { kind };
     if (disposed) return;
     const id = isTerminal(kind) ? `${kind}-${params.n}` : kind;
@@ -334,7 +449,7 @@ export function mountDock(
   restore().catch((err: Error) => onError(err.message));
 
   const subscriptions = [
-    { dispose: onThemeChange(() => dockApi.updateOptions({ theme: isDark() ? themeDark : themeLight })) },
+    { dispose: onThemeChange(() => dockApi.updateOptions({ theme: dockTheme() })) },
     dockApi.onDidLayoutChange(() => {
       if (!restoring) save();
       notify();

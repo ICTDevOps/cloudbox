@@ -27,8 +27,11 @@ api POST "" '{"id":"contoso-prd","name":"Contoso — production","env":"prd"}'
 api POST "" '{"id":"fabrikam-acc","name":"Fabrikam — acceptance","env":"acc"}'
 api POST "" '{"id":"lab","name":"Internal lab","env":"dev"}'
 api PUT /contoso-prd '{"settings":{"tenant":"contoso.onmicrosoft.com","clientId":"3f2a8c1e-5b7d-4e9a-a1c2-7d6e5f4b3a21"}}'
-# Assistant activé (sans clé) : onglet « AI assistant » de la fenêtre Settings
-docker exec "$NAME" curl -sf -o /dev/null -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"enabled":true}' "$BASE/api/assistant/config"
+# Assistant activé avec une clé fictive (la liste des modèles échoue, aucun message n'est envoyé) :
+# panneau Assistant et onglet « AI assistant »
+docker exec "$NAME" curl -sf -o /dev/null -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    -d '{"enabled":true,"providers":[{"id":"openrouter","apiKey":"sk-or-demo-0000000000"}],"default":{"provider":"openrouter","model":"openrouter/auto"}}' \
+    "$BASE/api/assistant/config"
 docker exec -i -u dev "$NAME" bash -c 'cat > /home/dev/workspaces/contoso-prd/deploy.ps1' <<'PS1'
 # Deploys the Contoso landing zone
 param(

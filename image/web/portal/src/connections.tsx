@@ -5,6 +5,7 @@ import { api, type CloudContext, type Workspace, type WorkspaceSettings } from '
 import { useCloudContext } from './context';
 import type { DockHandle, TerminalRef } from './dock';
 import { t } from './i18n';
+import { Icon } from './icons';
 
 // 'pwsh' : cmdlet PowerShell, insérable seulement dans un terminal PowerShell
 type CommandShell = 'any' | 'pwsh';
@@ -190,9 +191,9 @@ export function ConnectionsDrawer({ ws, dock, onClose, onEditSettings }: {
     <aside class="conn-drawer" aria-label={t().common.connections}
       onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <div class="conn-top">
-        <h2>{t().common.connections}</h2>
+        <h2><Icon name="book" size={18} /> {t().common.connections}</h2>
         <button type="button" class="dialog-close" aria-label={m.closePanel} title={m.closeEsc}
-          onClick={onClose}>×</button>
+          onClick={onClose}><Icon name="close" size={18} /></button>
       </div>
       <input ref={filterRef} class="conn-filter" type="search" placeholder={m.filter} value={filter}
         onInput={(e) => setFilter(e.currentTarget.value)} aria-label={m.filterLabel} />

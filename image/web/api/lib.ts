@@ -2,7 +2,7 @@
 // contexte réel, lecture des requêtes. Utilisés par server.ts et par l'assistant (assistant/).
 
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
@@ -166,6 +166,51 @@ export async function resolveFolder(v: unknown, id: string): Promise<string> {
   const real = await realpath(abs);
   if (real !== HOME && !real.startsWith(HOME + '/')) throw new HttpError(400, 'Le dossier doit être sous /home/dev', 'The folder must be under /home/dev');
   return real;
+}
+
+// Dossiers proposés par le sélecteur du formulaire de création : sous-dossiers d'un dossier de
+// /home/dev (liens résolus, jamais au-dessus), sans les dossiers cachés (configurations, jetons)
+export interface FolderList {
+  path: string;
+  parent: string | null;
+  folders: string[];
+}
+
+const MAX_FOLDERS = 500;
+
+export async function listFolders(v: unknown): Promise<FolderList> {
+  const raw = typeof v === 'string' && v.trim() !== '' ? v.trim() : HOME;
+  if (raw.length > 4096 || /[\x00-\x1f]/.test(raw)) throw new HttpError(400, 'Chemin invalide', 'Invalid path');
+  let real: string;
+  try {
+    real = await realpath(path.resolve(HOME, raw));
+  } catch {
+    throw new HttpError(404, 'Dossier introuvable', 'Folder not found');
+  }
+  if (real !== HOME && !real.startsWith(HOME + '/')) throw new HttpError(400, 'Le dossier doit être sous /home/dev', 'The folder must be under /home/dev');
+  let entries;
+  try {
+    entries = await readdir(real, { withFileTypes: true });
+  } catch {
+    throw new HttpError(404, 'Dossier illisible', 'Folder not readable');
+  }
+  const folders: string[] = [];
+  for (const e of entries) {
+    if (e.name.startsWith('.')) continue;
+    let dir = e.isDirectory();
+    if (!dir && e.isSymbolicLink()) {
+      // Lien : retenu seulement s'il mène à un dossier sous /home/dev
+      try {
+        const target = await realpath(path.join(real, e.name));
+        dir = (target === HOME || target.startsWith(HOME + '/')) && (await readdir(target).then(() => true, () => false));
+      } catch {
+        dir = false;
+      }
+    }
+    if (dir) folders.push(e.name);
+  }
+  folders.sort((a, b) => a.localeCompare(b));
+  return { path: real, parent: real === HOME ? null : path.dirname(real), folders: folders.slice(0, MAX_FOLDERS) };
 }
 
 // --- Préférences du portail (communes à tous les workspaces) ---

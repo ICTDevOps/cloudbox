@@ -110,6 +110,14 @@ with sync_playwright() as p:
     form = "dialog[open] .create-ws"
     page.wait_for_selector(form)
     check("panneaux proposés à la création", page.locator(f"{form} input[name=create-panels]:checked").count() == 3)
+    page.click(f"{form} .folder-browse")
+    try:
+        page.locator(f"{form} .folder-current", has_text="~").wait_for(timeout=5000)
+        check("sélecteur de dossier : départ sous /home/dev", True)
+    except Exception:  # noqa: BLE001
+        check("sélecteur de dossier : départ sous /home/dev", False, page.locator(f"{form} .folder-picker").inner_text())
+    page.click(f"{form} .folder-browse")  # refermé
+    check("sélecteur de dossier refermé", page.locator(f"{form} .folder-picker").count() == 0)
     page.fill(f"{form} input >> nth=0", "Client démo PRD")
     check("identifiant proposé", page.input_value(f"{form} input >> nth=1") == WS_ID,
           page.input_value(f"{form} input >> nth=1"))
@@ -127,6 +135,8 @@ with sync_playwright() as p:
     srcs = sorted(frames.evaluate_all("els => els.map(e => e.getAttribute('src'))"))
     check("iframes", srcs == [f"/code/?folder=%2Fhome%2Fdev%2Fworkspaces%2F{WS_ID}",
                               f"/term/bash/?arg={WS_ID}~2", f"/term/pwsh/?arg={WS_ID}~1"], srcs)
+    check("onglets : « + » dans les groupes de terminaux", page.locator(f"{A} .cb-group-actions.left button:not([hidden])").count() == 2)
+    check("onglets : ouvrir dans un onglet et agrandir", page.locator(f"{A} .cb-group-actions.right button:not([hidden])").count() == 6)
     code = page.frame_locator(f"{A} iframe[src^='/code/']")
     try:
         code.locator(".monaco-workbench").wait_for(timeout=30000)
@@ -198,7 +208,7 @@ with sync_playwright() as p:
     check("glisser le séparateur au-dessus d'une iframe", before - after > 150, f"{before} → {after}")
 
     # --- Ajout d'un panneau, puis rechargement : disposition et sessions retrouvées ---
-    page.locator(f"{A} .ws-toolbar button", has_text="+ PowerShell").click()
+    page.locator(f"{A} .ws-toolbar .add-panel.kind-pwsh").click()
     page.wait_for_timeout(6000)
     check("panneau ajouté", "PowerShell 3" in tab_titles(page), tab_titles(page))
     page.wait_for_timeout(1500)  # sauvegarde différée
@@ -220,8 +230,8 @@ with sync_playwright() as p:
     page2.wait_for_selector(f"{A} .dv-tab", timeout=20000)
     page2.wait_for_timeout(3000)
     before_two = set(sessions(page))
-    page.locator(f"{A} .ws-toolbar button", has_text="+ PowerShell").click()
-    page2.locator(f"{A} .ws-toolbar button", has_text="+ PowerShell").click()
+    page.locator(f"{A} .ws-toolbar .add-panel.kind-pwsh").click()
+    page2.locator(f"{A} .ws-toolbar .add-panel.kind-pwsh").click()
     page.wait_for_timeout(6000)
     new_sessions = sorted(set(sessions(page)) - before_two)
     check("deux onglets : deux nouvelles sessions distinctes", len(new_sessions) == 2, new_sessions)
@@ -402,13 +412,13 @@ with sync_playwright() as p:
     check("plus de suppression dans les paramètres du workspace", page.locator(".settings-dialog .danger-zone").count() == 0)
     page.click(".sidebar a.nav-item[href='#/w/projet-b']")
     page.wait_for_selector(f"{A}.env-frame-dev .dv-tab", timeout=20000)
-    page.click(f"{A} .ws-toolbar .ws-delete")
+    page.click(f"{A} .ws-delete")
     page.wait_for_selector("dialog[open] .delete-ws")
     check("confirmation : dossier conservé", "/home/dev/workspaces/projet-b" in page.locator("dialog[open] .delete-ws").inner_text())
     page.click("dialog[open] .delete-ws .button.ghost")  # Annuler
     page.wait_for_timeout(500)
     check("annulation : workspace conservé", page.locator(".sidebar a.nav-item[href='#/w/projet-b']").count() == 1)
-    page.click(f"{A} .ws-toolbar .ws-delete")
+    page.click(f"{A} .ws-delete")
     page.wait_for_selector("dialog[open] .delete-ws")
     page.click("dialog[open] .delete-ws button[type=submit]")
     page.wait_for_timeout(1500)

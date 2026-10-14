@@ -110,7 +110,15 @@ document.addEventListener('contextmenu', function (event) {
     brightBlack: '#57606a', brightRed: '#a40e26', brightGreen: '#1a7f37', brightYellow: '#633c01',
     brightBlue: '#0550ae', brightMagenta: '#6639ba', brightCyan: '#136061', brightWhite: '#ffffff'
   };
-  var dark = null; // couleurs d'origine de ttyd, relevées sur le premier terminal
+  // Sombre : bleu nuit du portail
+  var DARK = {
+    background: '#0b1729', foreground: '#d6deeb', cursor: '#d6deeb', cursorAccent: '#0b1729',
+    selectionBackground: '#264f78', selectionForeground: '#ffffff',
+    black: '#1b2638', red: '#ff6b6b', green: '#7fd962', yellow: '#f5c451',
+    blue: '#5aa2ff', magenta: '#c792ea', cyan: '#4fd1d9', white: '#c5d1e0',
+    brightBlack: '#5d6f8a', brightRed: '#ff8a80', brightGreen: '#a3f07f', brightYellow: '#ffe083',
+    brightBlue: '#82b8ff', brightMagenta: '#e0a8ff', brightCyan: '#7ee8ef', brightWhite: '#ffffff'
+  };
   var prefs = null;
   var applied = null;
   var media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -129,10 +137,9 @@ document.addEventListener('contextmenu', function (event) {
   }
   function apply(term) {
     if (!term || !term.options) return;
-    if (!dark) dark = Object.assign({}, term.options.theme || {});
     if (!prefs) return;
     var o = term.options;
-    var theme = isDark() ? dark : LIGHT;
+    var theme = isDark() ? DARK : LIGHT;
     o.fontFamily = prefs.fontFamily || 'Consolas, "Liberation Mono", Menlo, Courier, monospace';
     o.fontSize = prefs.fontSize;
     o.lineHeight = prefs.lineHeight;

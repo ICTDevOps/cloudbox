@@ -6,6 +6,7 @@ import { api, ENV_LABELS, ENVS, type Env, type ModelChoice, type Workspace, type
 import { ModelPicker } from './ai-settings';
 import { useAssistantConfig } from './assistant';
 import { t } from './i18n';
+import { Icon } from './icons';
 
 type Field = { key: keyof WorkspaceSettings; label: string; placeholder: string; help: string };
 
@@ -57,7 +58,13 @@ export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
 
   return (
     <form class="card create-ws ws-settings" onSubmit={submit}>
-      <h2>{m.settings.title}</h2>
+      <div class="dialog-head">
+        <span class="icon-tile large"><Icon name="gear" size={28} /></span>
+        <div>
+          <h2>{m.settings.title}</h2>
+          <p>{ws.name}</p>
+        </div>
+      </div>
       <label>
         {m.common.name}
         <input value={name} onInput={(e) => setName(e.currentTarget.value)} required maxLength={64} />
@@ -67,6 +74,7 @@ export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
         {ENVS.map((value) => (
           <label class={`env-option env-${value}${env === value ? ' selected' : ''}`} key={value}>
             <input type="radio" name="settings-env" value={value} checked={env === value} onChange={() => setEnv(value)} />
+            <Icon name="cube" size={18} />
             {ENV_LABELS[value]}
           </label>
         ))}
