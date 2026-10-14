@@ -164,6 +164,30 @@ L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le context
 (abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,
 y compris dans le prompt de chaque shell.
 
+### Assistant IA
+
+Panneau Dockview « Assistant » (composant Preact), **désactivé par défaut**, activé dans le
+portail (« Assistant IA », barre latérale). `CLOUDBOX_ASSISTANT=off` l'interdit sur le poste.
+
+- **Fournisseurs par clé API** : OpenRouter, Anthropic, OpenAI, et tout point d'accès compatible
+  OpenAI (Azure OpenAI, passerelle). Clés dans `/home/dev/.cloudbox/assistant/config.json` (0600) ou
+  `CLOUDBOX_<FOURNISSEUR>_API_KEY` ; jamais renvoyées au navigateur, non exportées dans les
+  terminaux web ni dans code-server (elles restent lisibles par `dev` : fichier, `docker exec`),
+  masquées à l'identique, comme le jeton Cloudbox, dans tout ce qui part vers un fournisseur. Liste des modèles lue chez le fournisseur, aucun identifiant
+  de modèle en dur.
+- **Abonnements Claude / ChatGPT** : jamais dans le panneau natif (leur jeton est réservé aux
+  applications de l'éditeur). Ils passeront par un panneau « Agent CLI » (Claude Code, Codex CLI
+  dans un terminal du workspace) : à faire.
+- **Contexte par workspace** : `AGENTS.md` du dossier du workspace (écrit par l'utilisateur),
+  mémoire et conversations dans `/home/dev/.cloudbox/assistant/workspaces/<id>/` (supprimées avec
+  le workspace), environnement et paramètres déclarés, contexte réel relu à chaque échange.
+- **Outils** : lecture libre (contexte réel, terminaux du workspace par `tmux capture-pane`,
+  fichiers du dossier du workspace sauf dossiers cachés du home, mémoire) ; `run_command` ne
+  fait que **proposer**.
+- **Secrets** : masqués par motifs (`assistant/redact.ts`) avant tout envoi et tout enregistrement.
+- Code : `image/web/api/assistant/` (adaptateurs en streaming sans dépendance, boucle d'agent,
+  routes), `image/web/portal/src/assistant.tsx`, `ai-settings.tsx`.
+
 Seul Caddy écoute sur le réseau du container (port 8080). ttyd, code-server et cloudbox-api
 écoutent sur des sockets UNIX à l'intérieur du container, sans authentification propre :
 Caddy est la seule porte.
@@ -203,6 +227,13 @@ Les caches de jetons MSAL sont en clair dans `/home/dev`. Règles :
    Les paramètres de connexion d'un workspace (tenant, abonnement, URL SharePoint, ClientId) suivent
    des jeux de caractères stricts ; la saisie dans un terminal (`tmux send-keys -l`) refuse tout
    caractère de contrôle : jamais d'Entrée, la commande est validée par l'utilisateur.
+   **Seule exception** : une commande proposée par l'assistant, après clic sur « Exécuter »
+   (`POST …/assistant/…/proposals/:pid/approve`). Le texte reste soumis aux mêmes règles et la
+   touche Entrée est envoyée à part. L'API vérifie que la session appartient au workspace et au
+   shell visé, que le terminal est sur une ligne de prompt vide (rien de déjà saisi, pas de
+   commande en cours), et exige `confirmPrd` en PRD. La carte de
+   validation affiche le contexte réel, en rouge s'il diffère du tenant ou de l'abonnement déclaré.
+   La fin de la commande est signalée par les prompts Cloudbox (option tmux `@cloudbox_prompt`).
 
 ## Authentification vers Azure / M365
 
@@ -237,7 +268,7 @@ image/web/Dockerfile
 image/web/rootfs/etc/s6-overlay/s6-rc.d/   # caddy, ttyd-pwsh, ttyd-bash, code-server, cloudbox-init
 image/web/rootfs/etc/caddy/Caddyfile
 image/web/portal/                      # portail : TypeScript + Vite + Preact + Dockview
-image/web/api/                         # cloudbox-api (Node, TypeScript sans dépendance)
+image/web/api/                         # cloudbox-api (Node, TypeScript sans dépendance) ; assistant/ ; test/
 compose.yaml
 config/cloudbox.psd1
 scripts/*.ps1
@@ -289,6 +320,13 @@ Isolation par workspace : `AZURE_CONFIG_DIR` (az, azd), `KUBECONFIG`, `GH_CONFIG
 PowerShell (Az, Graph, EXO, Teams, PnP) seulement là où c'est vérifié module par module.
 Confirmation des opérations destructrices dans un workspace PRD (aide, pas une garantie).
 
+### Étape 2 bis — Assistant IA (en cours)
+
+1. Panneau natif par clé API (fait) : voir « Assistant IA » dans Architecture.
+2. Panneau « Agent CLI » pour les abonnements : Claude Code et Codex CLI épinglés dans `:cli`,
+   nouvelle sorte de terminal dans `cloudbox-term`, configuration isolée par workspace
+   (`CLAUDE_CONFIG_DIR`, équivalent Codex à vérifier), lecture seule ou plan en PRD.
+
 ### Étape 4 — Productivité
 
 Palette de commandes, bibliothèque de commandes (insertion dans le terminal actif), état des
@@ -296,8 +334,6 @@ connexions (az / Graph / EXO), upload/download de fichiers.
 
 ### Plus tard, en option
 
-- Assistant IA (panneau Dockview) : désactivé par défaut, clé API côté `cloudbox-api` uniquement,
-  masquage des secrets avant envoi, insertion de commande seulement après validation explicite.
 - Scripts PowerShell côté poste, module `Cloudbox.Connect`.
 
 ### Hors périmètre pour l'instant

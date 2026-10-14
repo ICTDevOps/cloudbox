@@ -2,8 +2,10 @@
 // panneau Connexions à droite et fenêtre des paramètres.
 // Une vue reste montée quand on passe à un autre workspace (masquée, pas détruite) : terminaux et
 // VS Code ne se rechargent pas au retour.
+import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type Workspace } from './api';
+import { AssistantPanel, useAssistantConfig } from './assistant';
 import { ConnectionsDrawer } from './connections';
 import { ContextBar } from './context';
 import { CONNECTIONS_EVENT, isConnectionsShortcut, mountDock, type DockHandle } from './dock';
@@ -33,14 +35,34 @@ function writeDrawer(open: boolean): void {
 
 function Dock({ ws, onReady, onError }: { ws: Workspace; onReady: (h: DockHandle | null) => void; onError: (m: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Le panneau Assistant reçoit les paramètres à jour du workspace (environnement, tenant…)
+  const wsRef = useRef(ws);
+  wsRef.current = ws;
+  const assistantRoots = useRef(new Set<HTMLElement>());
+  const handleRef = useRef<DockHandle | null>(null);
+  const renderPanel = (element: HTMLElement) =>
+    render(<AssistantPanel ws={wsRef.current} getDock={() => handleRef.current} />, element);
   useEffect(() => {
-    const handle = mountDock(ref.current!, ws, onError);
+    // Panneau Assistant : arbre Preact à part, monté dans l'élément du panneau Dockview
+    const renderAssistant = (element: HTMLElement) => {
+      assistantRoots.current.add(element);
+      renderPanel(element);
+      return () => {
+        assistantRoots.current.delete(element);
+        render(null, element);
+      };
+    };
+    const handle = mountDock(ref.current!, ws, onError, renderAssistant);
+    handleRef.current = handle;
     onReady(handle);
     return () => {
       onReady(null);
+      handleRef.current = null;
       handle.dispose();
     };
   }, [ws.id]);
+  // Paramètres du workspace modifiés : le panneau Assistant est rendu de nouveau
+  useEffect(() => assistantRoots.current.forEach(renderPanel), [ws]);
   return <div class="dock" ref={ref} />;
 }
 
@@ -52,6 +74,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   const [drawer, setDrawer] = useState(readDrawer);
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [settingsKey, setSettingsKey] = useState(0);
+  const assistant = useAssistantConfig();
 
   const toggleDrawer = (open?: boolean) => {
     setDrawer((current) => {
@@ -95,7 +118,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   }, [id]);
 
   useEffect(() => {
-    dock?.onChange(() => setTick((t) => t + 1));
+    return dock?.onChange(() => setTick((t) => t + 1));
   }, [dock]);
 
   useEffect(() => {
@@ -136,6 +159,12 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
           title={dock?.hasCode() ? m.workspace.codeOpen : ''}>
           {dock?.hasCode() ? 'VS Code' : '+ VS Code'}
         </button>
+        {assistant?.enabled && (
+          <button type="button" class="button" onClick={() => dock?.addPanel('assistant')}
+            title={dock?.hasAssistant() ? m.workspace.assistantOpen : ''}>
+            {dock?.hasAssistant() ? '✦ Assistant' : '+ ✦ Assistant'}
+          </button>
+        )}
         {error && <span class="error">{error}</span>}
         <span class="muted toolbar-hint">{m.workspace.autosave}</span>
         <button type="button" class="button ghost" onClick={openSettings} title={m.workspace.settingsTitle}>

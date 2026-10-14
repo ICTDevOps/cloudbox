@@ -1,6 +1,8 @@
 #!/command/with-contenv bash
 # VS Code web : code-server sur un socket UNIX, derrière Caddy (/code/), sans authentification propre.
 unset CLOUDBOX_TOKEN
+# Clés API de l'assistant : réservées à cloudbox-api, jamais visibles dans un shell
+for v in $(compgen -e | grep -E '^CLOUDBOX_[A-Z0-9_]+_API_KEY$'); do unset "$v"; done
 socket=/run/cloudbox/code-server.sock
 rm -f "$socket"
 /usr/local/bin/cloudbox-code-extensions || echo "[code-server] Avertissement : extensions non installées" >&2

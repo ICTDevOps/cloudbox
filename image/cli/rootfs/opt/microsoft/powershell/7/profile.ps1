@@ -30,6 +30,13 @@ Register-ArgumentCompleter -Native -CommandName az -ScriptBlock {
 # Prompt : workspace, dossier, branche git, contexte réel (az CLI, Az PowerShell, Kubernetes)
 function prompt {
     $ok = $?
+    $lastExit = $global:LASTEXITCODE
+    # Fin de commande signalée à tmux (option du panneau @cloudbox_prompt = <n>:<0|1>) : l'assistant
+    # du portail sait ainsi quand une commande validée est terminée, et si elle a réussi
+    if ($env:TMUX_PANE) {
+        $global:CloudboxPromptSeq = 1 + [int]$global:CloudboxPromptSeq
+        tmux set-option -p -t $env:TMUX_PANE '@cloudbox_prompt' "$($global:CloudboxPromptSeq):$(if ($ok) { 0 } else { 1 })" 2>$null
+    }
     $e = [char]27
     $ws = ''
     if ($env:CLOUDBOX_WORKSPACE) {
@@ -68,5 +75,7 @@ function prompt {
         if ($kctx) { $kube = " $e[35m⎈ $($kctx.Trim('"'))$e[0m" }
     }
     $mark = if ($ok) { "$e[32mPS>$e[0m" } else { "$e[31mPS>$e[0m" }
+    # Les commandes externes du prompt (tmux, git) ne doivent pas masquer le code de sortie de l'utilisateur
+    $global:LASTEXITCODE = $lastExit
     "$ws$e[36m$([Environment]::UserName)@$(hostname)$e[0m $e[34m$path$e[0m$git$az$azps$kube`n$mark "
 }

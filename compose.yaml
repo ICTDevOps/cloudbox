@@ -10,6 +10,10 @@
 #   CLOUDBOX_SHELL   pwsh ou bash : shell par défaut (cloudbox-shell, terminal de VS Code)
 #   CLOUDBOX_MODE    web (défaut) ou shell (aucun service web)
 #   TZ               fuseau horaire (défaut : Europe/Paris)
+#   CLOUDBOX_ASSISTANT              off pour interdire l'assistant IA (sinon activable dans le portail)
+#   CLOUDBOX_OPENROUTER_API_KEY     clés API de l'assistant (facultatives : saisissables dans le portail) ;
+#   CLOUDBOX_ANTHROPIC_API_KEY      non exportées dans les terminaux web ni dans VS Code
+#   CLOUDBOX_OPENAI_API_KEY
 name: cloudbox
 
 services:
@@ -27,6 +31,10 @@ services:
       CLOUDBOX_SUDO: ${CLOUDBOX_SUDO:-false}
       CLOUDBOX_SHELL: ${CLOUDBOX_SHELL:-pwsh}
       CLOUDBOX_MODE: ${CLOUDBOX_MODE:-web}
+      CLOUDBOX_ASSISTANT: ${CLOUDBOX_ASSISTANT:-}
+      CLOUDBOX_OPENROUTER_API_KEY: ${CLOUDBOX_OPENROUTER_API_KEY:-}
+      CLOUDBOX_ANTHROPIC_API_KEY: ${CLOUDBOX_ANTHROPIC_API_KEY:-}
+      CLOUDBOX_OPENAI_API_KEY: ${CLOUDBOX_OPENAI_API_KEY:-}
     volumes:
       - cloudbox-home:/home/dev
     # Pas de socket Docker monté, pas de mode privilégié.

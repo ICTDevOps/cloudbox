@@ -14,5 +14,5 @@
     "types": ["node"],
     "typeRoots": ["../portal/node_modules/@types"]
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "assistant/*.ts", "test/*.ts"]
 }
