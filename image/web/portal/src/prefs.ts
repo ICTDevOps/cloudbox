@@ -1,9 +1,12 @@
-// Préférences du portail (thème, nouveau workspace), lues et écrites par cloudbox-api.
+// Préférences du portail (thème, nouveau workspace, terminal), lues et écrites par cloudbox-api.
 // Le thème est aussi gardé dans localStorage : appliqué avant le premier rendu, sans flash.
+// Les préférences du terminal aussi (« cloudbox.terminal ») : la page ttyd de chaque terminal les lit
+// au chargement et suit leurs changements (événement « storage », reçu par les autres pages).
 import { useEffect, useState } from 'preact/hooks';
 import { api, type Preferences, type Theme } from './api';
 
 const THEME_KEY = 'cloudbox.theme';
+const TERMINAL_KEY = 'cloudbox.terminal';
 const dark = window.matchMedia('(prefers-color-scheme: dark)');
 
 let prefs: Preferences | null = null;
@@ -48,7 +51,15 @@ export function onThemeChange(listener: () => void): () => void {
   };
 }
 
-export type PrefsTab = 'general' | 'workspaces' | 'ai';
+function cacheTerminal(next: Preferences): void {
+  try {
+    window.localStorage.setItem(TERMINAL_KEY, JSON.stringify(next.terminal));
+  } catch {
+    // stockage indisponible : les terminaux lisent /api/preferences à leur chargement
+  }
+}
+
+export type PrefsTab = 'general' | 'workspaces' | 'terminal' | 'ai';
 
 // Ouvre la fenêtre Paramètres (barre latérale), éventuellement sur un onglet
 export const OPEN_SETTINGS_EVENT = 'cloudbox:open-settings';
@@ -58,10 +69,15 @@ export function openSettings(tab?: PrefsTab): void {
 
 export const prefsStore = {
   get: () => prefs,
+  subscribe(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => void listeners.delete(listener);
+  },
   async reload(): Promise<void> {
     try {
       prefs = await api.preferences();
       if (prefs.theme !== theme) applyTheme(prefs.theme);
+      cacheTerminal(prefs);
     } catch {
       // API indisponible : valeurs par défaut côté formulaire
     }
@@ -70,6 +86,7 @@ export const prefsStore = {
   set(next: Preferences): void {
     prefs = next;
     if (next.theme !== theme) applyTheme(next.theme);
+    cacheTerminal(next);
     listeners.forEach((l) => l());
   },
 };

@@ -86,7 +86,7 @@ with sync_playwright() as p:
     # --- Fenêtre Paramètres : thème, panneaux d'un nouveau workspace, assistant ---
     page.click(".sidebar-foot button.nav-item")
     page.wait_for_selector("dialog[open] .prefs")
-    check("onglets des paramètres", page.locator("dialog[open] .prefs-tabs button").count() == 3)
+    check("onglets des paramètres", page.locator("dialog[open] .prefs-tabs button").count() == 4)
     page.click("dialog[open] .seg-choice label:has(input[name=prefs-theme]) >> nth=2")
     page.locator("html[data-theme=dark]").wait_for(state="attached", timeout=5000)
     check("thème sombre forcé", True)
@@ -97,7 +97,7 @@ with sync_playwright() as p:
     check("panneaux par défaut cochés", checked == 3, str(checked))
     check("assistant désactivé : case grisée",
           page.locator("dialog[open] .panel-option.disabled input[name=prefs-panels]").count() == 1)
-    page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.click("dialog[open] .prefs-tabs button >> nth=3")
     page.wait_for_selector("dialog[open] .ai-enable")
     check("onglet Assistant IA : fournisseurs masqués tant qu'il est désactivé",
           page.locator("dialog[open] .ai-provider").count() == 0)
@@ -134,6 +134,53 @@ with sync_playwright() as p:
     except Exception as err:  # noqa: BLE001
         check("VS Code chargé dans son panneau", False, str(err)[:200])
     page.screenshot(path=f"{OUT}/2-workspace.png")
+
+    # --- Barre de chemin : dossier courant lu par tmux, clic = « cd » saisi sans Entrée ---
+    bash_bar = page.locator(f"{A} .panel-frame:has(iframe[src^='/term/bash/?arg={WS_ID}~2']) .path-bar")
+    try:
+        bash_bar.locator("button.last").wait_for(timeout=10000)
+        crumbs = bash_bar.locator(".path-crumbs button").all_inner_texts()
+        check("barre de chemin : dossier du workspace", crumbs == ["~", "workspaces", WS_ID], crumbs)
+    except Exception as err:  # noqa: BLE001
+        check("barre de chemin affichée", False, str(err)[:200])
+    check("pas de barre de chemin pour VS Code", page.locator(f"{A} .panel-frame:has(iframe[src^='/code/']) .path-bar").count() == 0)
+    bash_bar.locator(".path-crumbs button", has_text="workspaces").click()
+    page.wait_for_timeout(1000)
+    last = [l for l in (terminal_text(page, f"{A} iframe[src^='/term/bash/?arg={WS_ID}~2']") or "").split("\n") if l.strip()][-2:-1]
+    check("clic sur un segment : cd saisi, non exécuté", bool(last) and last[0].rstrip().endswith("cd '/home/dev/workspaces'"), last)
+    check("focus rendu au terminal après le clic", page.evaluate("document.activeElement?.getAttribute('src') || ''").startswith("/term/bash/"))
+    page.keyboard.press("Control+U")
+
+    # --- Onglet Terminal des paramètres : appliqué à chaud aux terminaux ouverts ---
+    term_font = "() => window.term ? [window.term.options.fontSize, window.term.options.theme?.background ?? null] : null"
+    pwsh_body = page.frame_locator(f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']").locator("body")
+    before_font = pwsh_body.evaluate(term_font)
+    page.click(".sidebar-foot button.nav-item")
+    page.wait_for_selector("dialog[open] .prefs")
+    page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.wait_for_selector("dialog[open] .terminal-prefs")
+    page.click("dialog[open] .stepper button >> nth=1")
+    page.click("dialog[open] .stepper button >> nth=1")
+    page.click("dialog[open] .seg-choice label:has(input[name=prefs-term-theme]) >> nth=1")  # couleurs claires
+    page.screenshot(path=f"{OUT}/1c-terminal.png")
+    page.click("dialog[open] .terminal-prefs .button.primary")
+    page.wait_for_selector("dialog[open] .terminal-prefs [role=status]")
+    page.click("dialog[open] .dialog-close")
+    page.wait_for_timeout(1500)
+    after_font = pwsh_body.evaluate(term_font)
+    check("taille et couleurs appliquées sans rechargement", after_font == [before_font[0] + 2, "#ffffff"], f"{before_font} → {after_font}")
+    page.screenshot(path=f"{OUT}/2b-terminal-clair.png")
+    page.reload()
+    page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
+    page.wait_for_timeout(4000)
+    check("apparence conservée après rechargement", pwsh_body.evaluate(term_font) == after_font, pwsh_body.evaluate(term_font))
+    # Retour à la taille et aux couleurs d'origine : le menu tmux du clic droit (plus bas) doit tenir
+    # dans le panneau Bash
+    page.evaluate("size => fetch('/api/preferences', {method: 'PUT', headers: {'Content-Type': 'application/json'},"
+                  " body: JSON.stringify({terminal: {theme: 'auto', fontSize: size}})})", before_font[0])
+    page.reload()
+    page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
+    page.wait_for_timeout(4000)
 
     # --- Glisser le séparateur vertical au-dessus des iframes ---
     sash = page.locator(f"{A} .dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash").first
@@ -303,6 +350,9 @@ with sync_playwright() as p:
     page.keyboard.press("Control+U")
 
     # --- Clic droit : le menu de tmux reste ouvert quand la souris bouge ---
+    # Fenêtre plus haute : le menu de tmux ne s'affiche que s'il tient dans le panneau
+    page.set_viewport_size({"width": 1400, "height": 1100})
+    page.wait_for_timeout(1000)
     screen = term.locator(".xterm-screen").bounding_box()
     mx, my = screen["x"] + screen["width"] / 3, screen["y"] + screen["height"] / 3
     page.mouse.move(mx, my)
@@ -317,6 +367,7 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
     check("Échap ferme le menu tmux", "Horizontal Split" not in (terminal_text(page, bash_frame) or ""))
+    page.set_viewport_size({"width": 1400, "height": 900})
 
     # --- Navigation entre workspaces par la barre latérale, sans rechargement ---
     pwsh_frame = f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']"

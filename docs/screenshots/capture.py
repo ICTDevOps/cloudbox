@@ -70,9 +70,13 @@ with sync_playwright() as p:
     page.screenshot(path=f"{OUT}/settings.png")
     page.click("dialog[open] .dialog-close")
 
-    # Fenêtre Settings de la barre latérale, onglet Assistant IA
+    # Fenêtre Settings de la barre latérale, onglet Terminal puis onglet Assistant IA
     page.click(".sidebar-foot button.nav-item")
     page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.wait_for_selector("dialog[open] .terminal-prefs")
+    page.wait_for_timeout(500)
+    page.screenshot(path=f"{OUT}/terminal-settings.png")
+    page.click("dialog[open] .prefs-tabs button >> nth=3")
     page.wait_for_selector("dialog[open] .ai-provider")
     page.wait_for_timeout(500)
     page.screenshot(path=f"{OUT}/preferences.png")

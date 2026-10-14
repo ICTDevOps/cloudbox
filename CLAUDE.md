@@ -163,7 +163,13 @@ Bash et VS Code dans une disposition redimensionnable, sauvegardée dans le volu
 La fenêtre « ⚙ Paramètres » de la barre latérale (onglets Général, Workspaces, Assistant IA)
 enregistre les préférences du portail dans `/home/dev/.cloudbox/preferences.json` (`GET/PUT
 /api/preferences`) : thème (auto / clair / sombre, mis en cache dans `localStorage` pour le premier
-rendu), environnement et panneaux proposés à la création. Les panneaux choisis à la création
+rendu), environnement et panneaux proposés à la création, apparence des terminaux (onglet Terminal :
+police du poste, taille, interligne, curseur, couleurs, barre de chemin). L'apparence est appliquée
+par la page ttyd (`image/web/build/ttyd-index-addon.html`) à `window.term`, depuis le cache
+`localStorage` `cloudbox.terminal` puis `/api/preferences`, et suivie à chaud (événement `storage`).
+La barre de chemin (`portal/src/pathbar.ts`) lit `GET /api/workspaces/:id/terminals`
+(`#{pane_current_path}` de tmux ; le prompt PowerShell aligne le dossier du processus sur
+`Set-Location`). Un clic sur un segment saisit `cd '…'` sans Entrée, comme le panneau Connexions. Les panneaux choisis à la création
 (`initialPanels`) donnent la disposition de la première ouverture.
 L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le contexte affiché
 (abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,

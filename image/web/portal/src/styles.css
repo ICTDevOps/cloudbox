@@ -411,8 +411,33 @@ kbd {
 .field-help { font-weight: 400; font-size: 0.75rem; color: var(--muted); }
 
 /* Panneaux Dockview */
-.panel-frame { width: 100%; height: 100%; }
-.panel-frame iframe { display: block; width: 100%; height: 100%; border: 0; background: #2b2b2b; }
+.panel-frame { width: 100%; height: 100%; display: flex; flex-direction: column; }
+.panel-frame iframe { display: block; width: 100%; flex: 1; min-height: 0; border: 0; background: #2b2b2b; }
+
+/* Barre de chemin d'un terminal : dossier courant (lu par tmux), segments cliquables */
+.path-bar {
+  display: flex; align-items: center; gap: 0.3rem; flex: none; height: 1.4rem; padding: 0 0.3rem 0 0.5rem;
+  border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 0.78rem;
+}
+.path-bar[hidden] { display: none; }
+.path-crumbs {
+  flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
+  font-family: "Cascadia Mono", Consolas, monospace; direction: rtl; text-align: left;
+}
+/* Conteneur rtl : un chemin trop long déborde à gauche, la fin reste visible ; un chemin court reste
+   aligné à gauche. Le fil d'Ariane lui-même est en ltr (ordre normal des segments). */
+.path-crumbs > span { display: inline-block; direction: ltr; }
+.path-crumbs .sep { color: var(--muted); padding: 0 0.15rem; }
+.path-crumbs button {
+  font: inherit; border: none; background: transparent; color: var(--text); padding: 0.05rem 0.2rem; border-radius: 4px; cursor: pointer;
+}
+.path-crumbs button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.path-crumbs button:disabled { cursor: default; }
+.path-crumbs .outside { color: var(--muted); }
+.path-crumbs .last { font-weight: 700; }
+.path-busy { flex: none; color: var(--muted); font-size: 0.72rem; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path-copy { flex: none; border: none; background: transparent; color: var(--muted); cursor: pointer; padding: 0.1rem 0.3rem; border-radius: 4px; }
+.path-copy:hover { color: var(--text); background: var(--surface); }
 /* Pendant un glisser, les iframes ne doivent pas capturer le pointeur */
 .cb-dragging iframe { pointer-events: none; }
 
@@ -436,7 +461,8 @@ kbd {
 .assistant-empty { padding: 1rem; }
 .assistant-bar { display: flex; gap: 0.35rem; align-items: center; padding: 0.4rem 0.6rem 0; }
 .assistant-bar select, .assistant-model, .assistant-input textarea, .assistant-memory textarea, .proposal-cmd,
-.ai-settings input, .ai-settings select, .model-picker input, .model-picker select, .prefs select {
+.ai-settings input, .ai-settings select, .model-picker input, .model-picker select, .prefs select,
+.terminal-prefs input:not([type="checkbox"]):not([type="radio"]) {
   font: inherit; font-size: 0.85rem; padding: 0.3rem 0.45rem;
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
 }
@@ -537,6 +563,18 @@ kbd {
 .panel-choice { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .create-ws .panel-option { display: inline-flex; }
 .panel-option.disabled { opacity: 0.55; cursor: default; }
+/* Onglet Terminal des Paramètres */
+.terminal-prefs > label:not(.check), .terminal-size > label { display: grid; gap: 0.25rem; font-size: 0.85rem; font-weight: 600; }
+.terminal-prefs label.check { display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; }
+.terminal-prefs select { justify-self: start; }
+.terminal-size { display: flex; flex-wrap: wrap; gap: 1rem; }
+.stepper { display: inline-flex; align-items: center; gap: 0.25rem; }
+.stepper input { width: 4.2rem; text-align: center; }
+.terminal-preview { padding: 0.6rem 0.75rem; border-radius: 6px; border: 1px solid var(--border); white-space: pre; overflow: hidden; }
+.preview-cursor { display: inline-block; width: 0.6em; height: 1.1em; vertical-align: text-bottom; margin-left: 0.1em; border: 0 solid; }
+.preview-cursor.block { background: currentColor; opacity: 0.7; }
+.preview-cursor.bar { border-left-width: 2px; width: 0; }
+.preview-cursor.underline { border-bottom-width: 2px; }
 .warn { margin: 0; padding: 0.35rem 0.6rem; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); font-size: 0.85rem; }
 @media (max-width: 600px) {
   .prefs-body { grid-template-columns: 1fr; min-height: 0; }

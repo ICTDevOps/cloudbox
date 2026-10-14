@@ -25,8 +25,8 @@ docker logs cloudbox   # access token, then open http://localhost:8080
 | **Home**: the three tools of every workspace, terminal tips and the version of each tool in the image. | **Connections**: device-code sign-in commands completed with the workspace settings, typed into a terminal without being run. |
 | ![Workspace settings](docs/screenshots/settings.png) | ![Settings window, AI assistant tab](docs/screenshots/preferences.png) |
 | **Workspace settings**: name, environment (DEV / ACC / PRD), tenant, subscription, SharePoint URL, ClientId. | **Settings**: language, theme, panels of new workspaces, and the AI assistant (API keys, default model). |
-| ![Home page, dark theme](docs/screenshots/home-dark.png) | |
-| **Dark theme**, following the system setting or chosen in Settings. The interface is available in English and French. | |
+| ![Home page, dark theme](docs/screenshots/home-dark.png) | ![Settings window, Terminal tab](docs/screenshots/terminal-settings.png) |
+| **Dark theme**, following the system setting or chosen in Settings. The interface is available in English and French. | **Terminal appearance**: font, size, line height, cursor, colours, path bar. Applied right away to every open terminal. |
 
 The screenshots are produced by [`docs/screenshots/capture.sh`](docs/screenshots/capture.sh)
 (headless Chromium on a throwaway container with sample workspaces).
@@ -251,7 +251,16 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
   It collapses to a column of icons.
 - **Settings** (⚙ at the bottom of the sidebar), stored in the volume
   (`~/.cloudbox/preferences.json`): language, theme (system, light, dark), the environment and
-  panels suggested for new workspaces, and the [AI assistant](#ai-assistant-optional).
+  panels suggested for new workspaces, the terminal appearance and the
+  [AI assistant](#ai-assistant-optional).
+- **Terminal appearance** (Settings → Terminal): font (one installed on your computer, such as
+  Cascadia Mono or Consolas, or any CSS font list), size, line height, cursor style, and light or
+  dark colours (by default, those of the portal). Changes apply right away to every open terminal,
+  including the plain `/term/pwsh/` and `/term/bash/` pages.
+- **Path bar** above each terminal panel: the current folder as read by tmux, refreshed every
+  2 seconds. Clicking a segment types `cd '<folder>'` into the terminal without running it; the
+  segments are disabled while a command is running. The ⧉ button copies the path. The parts outside
+  the workspace folder are dimmed. It can be turned off in Settings → Terminal.
 - Switching between workspaces reloads nothing: the last four opened stay loaded (terminals and
   VS Code), marked by a blue dot in the sidebar.
 - The layout is saved automatically in the volume (`~/.cloudbox/workspaces/<id>.json`) and

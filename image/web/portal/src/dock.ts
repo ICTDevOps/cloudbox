@@ -24,6 +24,7 @@ import {
 import 'dockview/dist/styles/dockview.css';
 import { api, type PanelKind, type Workspace } from './api';
 import { t } from './i18n';
+import { PathBar, TerminalWatcher } from './pathbar';
 import { isDark, onThemeChange } from './prefs';
 
 export type { PanelKind };
@@ -62,15 +63,24 @@ function panelTitle(p: PanelParams): string {
   return isTerminal(p.kind) ? `${TITLES[p.kind]} ${p.n}` : TITLES[p.kind];
 }
 
-// Contenu d'un panneau : une iframe vers /term/<shell>/?arg=<workspace>~<n> ou /code/?folder=…
+// Contenu d'un panneau : une iframe vers /term/<shell>/?arg=<workspace>~<n> ou /code/?folder=…,
+// précédée de la barre de chemin pour les terminaux
 class FramePanel implements IContentRenderer {
   readonly element = document.createElement('div');
   private readonly ws: Workspace;
   private readonly onFocus: (panelId: string) => void;
+  private readonly watcher: TerminalWatcher;
+  private readonly focusPanel: (panelId: string) => void;
+  private readonly onError: (message: string) => void;
+  private pathBar: PathBar | null = null;
 
-  constructor(ws: Workspace, onFocus: (panelId: string) => void) {
+  constructor(ws: Workspace, onFocus: (panelId: string) => void, watcher: TerminalWatcher,
+    focusPanel: (panelId: string) => void, onError: (message: string) => void) {
     this.ws = ws;
     this.onFocus = onFocus;
+    this.watcher = watcher;
+    this.focusPanel = focusPanel;
+    this.onError = onError;
     this.element.className = 'panel-frame';
   }
 
@@ -99,7 +109,17 @@ class FramePanel implements IContentRenderer {
         }, true);
       });
     }
+    if (isTerminal(p.kind)) {
+      const id = parameters.api.id;
+      this.pathBar = new PathBar(this.ws.id, this.ws.folder, `${this.ws.id}_${p.kind}_${p.n}`, p.kind, this.watcher,
+        () => this.focusPanel(id), this.onError);
+      this.element.append(this.pathBar.element);
+    }
     this.element.append(frame);
+  }
+
+  dispose(): void {
+    this.pathBar?.dispose();
   }
 }
 
@@ -208,6 +228,8 @@ export function mountDock(
   const listeners = new Set<() => void>();
   // Panneaux par ordre d'utilisation, le plus récent en premier
   let recent: string[] = [];
+  // Dossier courant des terminaux (barres de chemin)
+  const watcher = new TerminalWatcher(ws.id);
 
   const closePanel = async (parameters: TabPartInitParameters) => {
     const p = parameters.params as unknown as PanelParams;
@@ -229,7 +251,7 @@ export function mountDock(
   const dockApi: DockviewApi = createDockview(root, {
     theme: isDark() ? themeDark : themeLight,
     createComponent: (options) =>
-      options.name === 'assistant' ? new AssistantPanel(renderAssistant) : new FramePanel(ws, (id) => touch(id)),
+      options.name === 'assistant' ? new AssistantPanel(renderAssistant) : new FramePanel(ws, (id) => touch(id), watcher, (id) => handle.focusPanel(id), onError),
     createTabComponent: () => new ClosableTab(closePanel),
     defaultTabComponent: 'cloudbox-tab',
     // Les iframes ne doivent pas être déplacées dans le DOM (elles se rechargeraient)
@@ -329,7 +351,7 @@ export function mountDock(
   };
   window.addEventListener('pagehide', onPageHide);
 
-  return {
+  const handle: DockHandle = {
     addPanel(kind) {
       // VS Code et l'assistant : un seul panneau par workspace
       if (!isTerminal(kind) && dockApi.getPanel(kind)) {
@@ -376,7 +398,9 @@ export function mountDock(
       disposed = true;
       subscriptions.forEach((s) => s.dispose());
       removeGuard();
+      watcher.dispose();
       dockApi.dispose();
     },
   };
+  return handle;
 }
