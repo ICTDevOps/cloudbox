@@ -161,12 +161,20 @@ const PROMPT_MARKS: Record<string, string> = { pwsh: 'PS>', bash: '$' };
 // commande pwsh en attente de réponse (Read-Host, confirmation, device code), invisible sinon.
 async function terminalReady(session: string, shell: 'pwsh' | 'bash', state?: PaneState): Promise<boolean> {
   const p = state ?? (await pane(session));
-  if (!SHELL_COMMANDS[shell].includes(p.command)) return false;
+  if (!SHELL_COMMANDS[shell].includes(p.command)) {
+    console.error(`[cloudbox-api] terminal non prêt ${session} : commande au premier plan ${p.command}`);
+    return false;
+  }
   if (!p.prompt) return true; // prompt personnalisé : seul le test du premier plan est possible
   const line = await run('tmux', ['capture-pane', '-p', '-t', `=${session}:`, '-S', String(p.cursor), '-E', String(p.cursor)])
     .catch(() => '');
   const mark = PROMPT_MARKS[shell];
-  return line.replace(/\s+$/, '') === mark && p.cursorX === mark.length + 1;
+  const text = line.replace(/\s+$/, '');
+  const ready = text.endsWith(mark) && p.cursorX === text.length + 1;
+  if (!ready) {
+    console.error(`[cloudbox-api] terminal non prêt ${session} : commande=${p.command} curseur=${p.cursorX} ligne=${JSON.stringify(redactText(text).slice(-80))}`);
+  }
+  return ready;
 }
 
 export async function terminalIdle(session: string, shell: 'pwsh' | 'bash'): Promise<boolean> {

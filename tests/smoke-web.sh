@@ -229,7 +229,15 @@ expect "validation refusée si la ligne n'est pas vide" 409 "$(api -X POST "${JS
 docker exec "$NAME" tmux send-keys -t '=ia_pwsh_1:' C-u
 sleep 1
 sse=$(docker exec "$NAME" curl -sN --max-time 60 "${AUTH[@]}" "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo cloudbox-fake-ok"}' "$P/approve")
-grep -q '^event: executed' <<<"$sse" && grep -q 'Résultat : ' <<<"$sse" && pass "commande validée : exécutée, sortie relue" || fail "validation : $(head -c 400 <<<"$sse")"
+if grep -q '^event: executed' <<<"$sse" && grep -q 'Résultat : ' <<<"$sse"; then
+    pass "commande validée : exécutée, sortie relue"
+else
+    fail "validation : $(head -c 400 <<<"$sse")"
+    # Diagnostic : état du panneau tmux et journal de l'API
+    docker exec "$NAME" tmux display-message -p -t '=ia_pwsh_1:' 'cmd=#{pane_current_command} x=#{cursor_x} y=#{cursor_y} signal=#{@cloudbox_prompt}'
+    docker exec "$NAME" tmux capture-pane -p -t '=ia_pwsh_1:' | cat -A | tail -n 8
+    docker logs "$NAME" 2>&1 | grep 'cloudbox-api' | tail -n 5
+fi
 expect "commande exécutée dans le terminal" 1 "$(docker exec "$NAME" tmux capture-pane -p -t '=ia_pwsh_1:' | grep -c '^cloudbox-fake-ok')"
 grep -q '"exitCode":0' <<<"$sse" && pass "fin de commande signalée par le prompt (code de sortie)" || fail "signal du prompt absent : $(grep executed -A1 <<<"$sse" | tail -c 300)"
 expect "seconde validation refusée" 409 "$(api -X POST "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo x"}' "$P/approve")"
