@@ -1,5 +1,5 @@
 // Vue d'un workspace : barre (environnement, contexte réel, ajout de panneaux), disposition Dockview,
-// panneau Connexions à droite et fenêtre des paramètres.
+// aide-mémoire (commandes de connexion) à droite, fenêtre des paramètres et suppression confirmée.
 // Une vue reste montée quand on passe à un autre workspace (masquée, pas détruite) : terminaux et
 // VS Code ne se rechargent pas au retour.
 import { render } from 'preact';
@@ -13,6 +13,49 @@ import { EnvBadge, TopBar } from './home';
 import { t } from './i18n';
 import { WorkspaceSettingsForm } from './settings';
 import { workspaceStore } from './store';
+
+// Confirmation de la suppression : ce qui est fermé, supprimé et conservé ; en PRD, l'identifiant
+// du workspace doit être retapé
+function DeleteWorkspaceForm({ ws, onCancel, onDeleted }: { ws: Workspace; onCancel: () => void; onDeleted: () => void }) {
+  const m = t().settings;
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const prd = ws.env === 'prd';
+  const remove = async (e: Event) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.deleteWorkspace(ws.id);
+      onDeleted();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form class="card delete-ws" onSubmit={remove}>
+      <h2>{m.confirmTitle(ws.name)}</h2>
+      <ul>
+        <li>{m.confirmSessions}</li>
+        <li>{m.confirmAssistant}</li>
+        <li>{m.confirmFolder(ws.folder)}</li>
+      </ul>
+      {prd && (
+        <label>
+          {m.confirmTypeId(ws.id)}
+          <input value={typed} autocomplete="off" spellcheck={false} onInput={(e) => setTyped(e.currentTarget.value)} />
+        </label>
+      )}
+      {error && <p class="error" role="alert">{error}</p>}
+      <div class="ws-actions">
+        <button type="submit" class="button danger-solid" disabled={busy || (prd && typed.trim() !== ws.id)}>{m.confirmDelete}</button>
+        <button type="button" class="button ghost" onClick={onCancel} autofocus>{t().common.cancel}</button>
+      </div>
+    </form>
+  );
+}
 
 // Panneau Connexions ouvert ou fermé : préférence commune à tous les workspaces
 const DRAWER_KEY = 'cloudbox.connections.open';
@@ -79,6 +122,8 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   const [drawer, setDrawer] = useState(readDrawer);
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [settingsKey, setSettingsKey] = useState(0);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
+  const [deleteKey, setDeleteKey] = useState(0);
   const assistant = useAssistantConfig();
 
   const toggleDrawer = (open?: boolean) => {
@@ -114,6 +159,11 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   const openSettings = () => {
     setSettingsKey((k) => k + 1);
     settingsDialog.current?.showModal();
+  };
+
+  const openDelete = () => {
+    setDeleteKey((k) => k + 1);
+    deleteDialog.current?.showModal();
   };
 
   useEffect(() => {
@@ -175,6 +225,9 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
         <button type="button" class="button ghost" onClick={openSettings} title={m.workspace.settingsTitle}>
           ⚙ {m.common.settings}
         </button>
+        <button type="button" class="button ghost danger ws-delete" onClick={openDelete} title={t().settings.deleteTitle}>
+          🗑 {t().settings.deleteButton}
+        </button>
         <button type="button" class={`button${drawer ? ' primary' : ''} conn-toggle`} onClick={() => toggleDrawer()}
           aria-expanded={drawer} title={m.workspace.connectionsTitle}>
           {m.common.connections}
@@ -195,8 +248,15 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
               setWs(saved);
               workspaceStore.reload();
             }}
+          />
+        )}
+      </dialog>
+      <dialog class="create-dialog delete-dialog" ref={deleteDialog} aria-label={t().settings.deleteTitle}>
+        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => deleteDialog.current?.close()}>×</button>
+        {deleteKey > 0 && (
+          <DeleteWorkspaceForm key={deleteKey} ws={ws} onCancel={() => deleteDialog.current?.close()}
             onDeleted={() => {
-              settingsDialog.current?.close();
+              deleteDialog.current?.close();
               window.location.hash = '#/';
               workspaceStore.reload();
             }} />

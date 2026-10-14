@@ -21,8 +21,8 @@ docker logs cloudbox   # access token, then open http://localhost:8080
 
 | | |
 |---|---|
-| ![Home page: tools and versions of the image](docs/screenshots/home.png) | ![Connections panel: sign-in commands completed with the workspace tenant](docs/screenshots/connections.png) |
-| **Home**: the three tools of every workspace, terminal tips and the version of each tool in the image. | **Connections**: device-code sign-in commands completed with the workspace settings, typed into a terminal without being run. |
+| ![Home page: tools and versions of the image](docs/screenshots/home.png) | ![Cheat sheet: sign-in commands completed with the workspace tenant](docs/screenshots/connections.png) |
+| **Home**: the three tools of every workspace, terminal tips and the version of each tool in the image. | **Cheat sheet**: device-code sign-in commands completed with the workspace settings, typed into a terminal without being run. |
 | ![Workspace settings](docs/screenshots/settings.png) | ![Settings window, AI assistant tab](docs/screenshots/preferences.png) |
 | **Workspace settings**: name, environment (DEV / ACC / PRD), tenant, subscription, SharePoint URL, ClientId. | **Settings**: language, theme, panels of new workspaces, and the AI assistant (API keys, default model). |
 | ![Home page, dark theme](docs/screenshots/home-dark.png) | ![Settings window, Terminal tab](docs/screenshots/terminal-settings.png) |
@@ -267,12 +267,13 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
   restored at the next visit.
 - Each terminal panel has its own tmux session, `<id>_<shell>_<n>`: reloading the page, closing
   the browser tab or moving a panel does not stop it. Only the cross on a tab (with confirmation)
-  closes the session. Deleting a workspace (⚙ Settings) closes its sessions but **keeps its
-  folder**.
+  closes the session.
+- **🗑 Delete** (workspace toolbar, next to ⚙ Settings) asks for a confirmation, and in PRD for the
+  workspace ID to be typed. It closes the workspace sessions but **keeps its folder**.
 - **Workspace settings** (⚙ button of the workspace): name, environment, the workspace sign-in
   values (tenant, subscription, SharePoint URL, ClientId of the Entra application used by PnP and
   CLI for Microsoft 365) and, if the assistant is enabled, a model for this workspace.
-- **Connections** (button on the right of the toolbar, or Ctrl+Shift+K, including from a
+- **Cheat sheet** (button on the right of the toolbar, or Ctrl+Shift+K, including from a
   terminal): panel of sign-in commands, completed with the workspace settings. Each command can
   be copied, or typed with one click into the last terminal used (a PowerShell terminal for
   cmdlets), **without being run**: review it, then press Enter. The actual state is shown when
@@ -325,7 +326,7 @@ context, the workspace terminals and files, and proposes commands that you appro
 
 ## Signing in to the services (device code)
 
-In a workspace, the **Connections** panel provides these commands already completed (tenant,
+In a workspace, the **Cheat sheet** panel provides these commands already completed (tenant,
 subscription, SharePoint URL, ClientId).
 
 | Service | Command |

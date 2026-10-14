@@ -308,6 +308,15 @@ kbd {
 }
 .danger-zone p { margin: 0.2rem 0 0; }
 .button.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 50%, var(--border)); background: transparent; }
+.button.danger-solid { color: #fff; background: var(--error); border-color: var(--error); }
+.button.danger-solid:disabled { opacity: 0.5; cursor: default; }
+.ws-toolbar .ws-delete { padding-inline: 0.6rem; }
+.delete-dialog { width: min(92vw, 480px); }
+.delete-ws { display: grid; gap: 0.6rem; box-shadow: 0 12px 40px rgb(0 0 0 / 0.3); }
+.delete-ws h2 { margin: 0; font-size: 1.1rem; padding-right: 1.5rem; }
+.delete-ws ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.25rem; font-size: 0.9rem; }
+.delete-ws label { display: grid; gap: 0.3rem; font-size: 0.85rem; font-weight: 600; }
+.delete-ws input { font: inherit; padding: 0.4rem 0.55rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
 .button.danger:hover { background: color-mix(in srgb, var(--error) 10%, transparent); border-color: var(--error); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 1rem; }

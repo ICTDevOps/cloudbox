@@ -20,10 +20,9 @@ function fields(): Field[] {
   ];
 }
 
-export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
+export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
   ws: Workspace;
   onSaved: (ws: Workspace) => void;
-  onDeleted: () => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(ws.name);
@@ -50,19 +49,6 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
     try {
       const saved = await api.updateWorkspace(ws.id, { name: name.trim(), env, settings, assistant: model });
       onSaved({ ...ws, name: saved.name, env: saved.env, settings, assistant: model ?? undefined });
-    } catch (err) {
-      setError((err as Error).message);
-      setBusy(false);
-    }
-  };
-
-  const remove = async () => {
-    const ok = window.confirm(m.settings.confirmDelete(ws.name, ws.folder));
-    if (!ok) return;
-    setBusy(true);
-    try {
-      await api.deleteWorkspace(ws.id);
-      onDeleted();
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -109,13 +95,6 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
       <div class="ws-actions">
         <button type="submit" class="button primary" disabled={busy}>{m.common.save}</button>
         <button type="button" class="button ghost" onClick={onCancel}>{m.common.cancel}</button>
-      </div>
-      <div class="danger-zone">
-        <div>
-          <strong>{m.settings.deleteTitle}</strong>
-          <p class="field-help">{m.settings.deleteHelp}</p>
-        </div>
-        <button type="button" class="button danger" onClick={remove} disabled={busy}>{m.common.delete}</button>
       </div>
     </form>
   );

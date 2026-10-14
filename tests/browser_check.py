@@ -398,12 +398,19 @@ with sync_playwright() as p:
     page.screenshot(path=f"{OUT}/6-barre-repliee.png")
     page.click(".sidebar-toggle")
 
-    # --- Suppression d'un workspace depuis ses paramètres ---
+    # --- Suppression d'un workspace : bouton de la barre, confirmation ---
+    check("plus de suppression dans les paramètres du workspace", page.locator(".settings-dialog .danger-zone").count() == 0)
     page.click(".sidebar a.nav-item[href='#/w/projet-b']")
     page.wait_for_selector(f"{A}.env-frame-dev .dv-tab", timeout=20000)
-    page.click(f"{A} .ws-toolbar button:has-text('Paramètres')")
-    page.wait_for_selector("dialog[open] .ws-settings")
-    page.click("dialog[open] .danger-zone button")
+    page.click(f"{A} .ws-toolbar .ws-delete")
+    page.wait_for_selector("dialog[open] .delete-ws")
+    check("confirmation : dossier conservé", "/home/dev/workspaces/projet-b" in page.locator("dialog[open] .delete-ws").inner_text())
+    page.click("dialog[open] .delete-ws .button.ghost")  # Annuler
+    page.wait_for_timeout(500)
+    check("annulation : workspace conservé", page.locator(".sidebar a.nav-item[href='#/w/projet-b']").count() == 1)
+    page.click(f"{A} .ws-toolbar .ws-delete")
+    page.wait_for_selector("dialog[open] .delete-ws")
+    page.click("dialog[open] .delete-ws button[type=submit]")
     page.wait_for_timeout(1500)
     check("workspace supprimé : retour à l'accueil", page.url.endswith("#/") and page.locator(".home .tool-tiles").count() == 1, page.url)
     check("workspace retiré de la barre", page.locator(".sidebar a.nav-item[href='#/w/projet-b']").count() == 0)
@@ -424,7 +431,7 @@ with sync_playwright() as p:
     check("API en anglais", err.get("error", "").startswith("Workspace not found"), err)
     page.click(f".sidebar a.nav-item[href='#/w/{WS_ID}']")
     page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
-    check("workspace en anglais", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Connections")
+    check("workspace en anglais", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Cheat sheet")
     page.screenshot(path=f"{OUT}/8-english.png")
     anon = browser.new_context(locale="fr-FR")
     login = anon.new_page()
@@ -434,7 +441,7 @@ with sync_playwright() as p:
     anon.close()
     page.click(".sidebar .lang-switch button[lang=fr]")
     page.wait_for_timeout(300)
-    check("retour au français", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Connexions")
+    check("retour au français", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Aide-mémoire")
 
     # --- Console : aucune violation de CSP ni erreur JavaScript du portail ---
     # vsda.js : module propriétaire de VS Code absent de code-server (404 en text/plain, bloqué par

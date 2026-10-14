@@ -169,7 +169,7 @@ par la page ttyd (`image/web/build/ttyd-index-addon.html`) à `window.term`, dep
 `localStorage` `cloudbox.terminal` puis `/api/preferences`, et suivie à chaud (événement `storage`).
 La barre de chemin (`portal/src/pathbar.ts`) lit `GET /api/workspaces/:id/terminals`
 (`#{pane_current_path}` de tmux ; le prompt PowerShell aligne le dossier du processus sur
-`Set-Location`). Un clic sur un segment saisit `cd '…'` sans Entrée, comme le panneau Connexions. Les panneaux choisis à la création
+`Set-Location`). Un clic sur un segment saisit `cd '…'` sans Entrée, comme l'aide-mémoire (panneau des commandes de connexion). Les panneaux choisis à la création
 (`initialPanels`) donnent la disposition de la première ouverture.
 L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le contexte affiché
 (abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,
