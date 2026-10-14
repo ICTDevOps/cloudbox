@@ -30,7 +30,10 @@ wait_healthy() {
 }
 
 section "Démarrage (CLOUDBOX_TOKEN imposé)"
-docker run -d --name "$NAME" -e CLOUDBOX_TOKEN="$TOKEN" "$IMAGE" >/dev/null
+# CLOUDBOX_ASSISTANT_ALLOW_HTTP : faux fournisseur d'IA local (section « Assistant IA ») ;
+# clé OpenAI fictive : jamais renvoyée par l'API, jamais visible dans un terminal
+OPENAI_KEY=sk-proj-smoketest$(openssl rand -hex 12)
+docker run -d --name "$NAME" -e CLOUDBOX_TOKEN="$TOKEN" -e CLOUDBOX_ASSISTANT_ALLOW_HTTP=1 -e CLOUDBOX_OPENAI_API_KEY="$OPENAI_KEY" "$IMAGE" >/dev/null
 if wait_healthy "$NAME"; then pass "Caddy répond"; else fail "Caddy ne répond pas"; finish; fi
 
 section "Sans jeton : 401"
@@ -187,6 +190,63 @@ expect "DELETE session client-prd_bash_2" 204 "$(api -X DELETE "${JSON[@]}" "$BA
 h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/term/pwsh/" | tr -d '\r')
 grep -qi '^x-frame-options: SAMEORIGIN' <<<"$h" && pass "terminal affichable en iframe de même origine" || fail "X-Frame-Options du terminal"
 
+section "Assistant IA"
+A="$BASE/api/assistant"
+cfg=$(docker exec "$NAME" curl -s "${AUTH[@]}" "$A/config")
+expect "assistant désactivé par défaut" "true false" "$(docker exec -i "$NAME" jq -r '"\(.allowed) \(.enabled)"' <<<"$cfg")"
+expect "clé fournie par l'environnement" "true true" "$(docker exec -i "$NAME" jq -r '.providers[] | select(.id == "openai") | "\(.configured) \(.keyFromEnv)"' <<<"$cfg")"
+expect "clé jamais renvoyée" 0 "$(grep -c "$OPENAI_KEY" <<<"$cfg")"
+expect "assistant désactivé : 403" 403 "$(api "$BASE/api/workspaces/client-prd/assistant")"
+expect "PUT config sans Content-Type JSON (CSRF)" 415 "$(api -X PUT -H 'Content-Type: text/plain' -d '{"enabled":true}' "$A/config")"
+expect "URL http d'un autre hôte refusée" 400 "$(api -X PUT "${JSON[@]}" -d '{"providers":[{"id":"x","baseUrl":"http://example.com/v1","apiKey":"abcdefgh12"}]}' "$A/config")"
+expect "URL avec identifiants refusée" 400 "$(api -X PUT "${JSON[@]}" -d '{"providers":[{"id":"x","baseUrl":"https://u:p@example.com/v1","apiKey":"abcdefgh12"}]}' "$A/config")"
+docker exec -d "$NAME" node /usr/lib/cloudbox-api/test/fake-provider.ts 18089 /tmp/fake-provider.jsonl
+sleep 1
+expect "PUT config : fournisseur, clé, modèle par défaut" 200 "$(api -X PUT "${JSON[@]}" -d '{"enabled":true,"providers":[{"id":"fake","label":"Faux","type":"openai-compatible","baseUrl":"http://127.0.0.1:18089/v1","auth":"bearer","apiKey":"test-key-123456"}],"default":{"provider":"fake","model":"fake/model-a"}}' "$A/config")"
+expect "config de l'assistant en 0600" 600 "$(docker exec "$NAME" stat -c %a /home/dev/.cloudbox/assistant/config.json)"
+expect "clé saisie jamais renvoyée" 0 "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$A/config" | grep -c test-key-123456)"
+expect "modèles du fournisseur" "fake/model-a fake/model-b" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$A/models?provider=fake" | docker exec -i "$NAME" jq -r '.models | join(" ")')"
+expect "POST workspace ia" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"ia","name":"IA","env":"dev"}' "$BASE/api/workspaces")"
+probe "$BASE/term/pwsh/ws?arg=ia~1" "$TOKEN" "$BASE" 'echo ok' >/dev/null
+W="$BASE/api/workspaces/ia/assistant"
+conv=$(docker exec "$NAME" curl -s -X POST "${AUTH[@]}" "${JSON[@]}" "$W/conversations" | docker exec -i "$NAME" jq -r .id)
+[[ $conv =~ ^[a-z0-9]{8,32}$ ]] && pass "conversation créée" || fail "conversation : $conv"
+expect "AGENTS.md créé dans le dossier du workspace" "dev" "$(docker exec "$NAME" stat -c %U /home/dev/workspaces/ia/AGENTS.md)"
+sse=$(docker exec "$NAME" curl -sN --max-time 30 "${AUTH[@]}" "${JSON[@]}" -d '{"text":"Test avec password=Sup3rSecret99","activeSession":"ia_pwsh_1"}' "$W/conversations/$conv/messages")
+grep -q '^event: proposal' <<<"$sse" && grep -q '"reason":"awaiting"' <<<"$sse" && pass "flux SSE : proposition en attente" || fail "flux SSE : $(head -c 400 <<<"$sse")"
+expect "commande non exécutée avant validation" 0 "$(docker exec "$NAME" tmux capture-pane -p -t '=ia_pwsh_1:' | grep -c 'cloudbox-fake-ok')"
+expect "secret masqué avant envoi au fournisseur" 0 "$(docker exec "$NAME" grep -c Sup3rSecret99 /tmp/fake-provider.jsonl)"
+expect "secret masqué dans la conversation" 0 "$(docker exec "$NAME" grep -rc Sup3rSecret99 /home/dev/.cloudbox/assistant/workspaces/ia | awk -F: '{ n += $2 } END { print n + 0 }')"
+pid=$(docker exec "$NAME" jq -r '.proposals[0].id' "/home/dev/.cloudbox/assistant/workspaces/ia/conversations/$conv.json")
+P="$W/conversations/$conv/proposals/$pid"
+expect "validation : session d'un autre workspace refusée" 400 "$(api -X POST "${JSON[@]}" -d '{"session":"client-prd_bash_2","command":"echo x"}' "$P/approve")"
+expect "validation : retour à la ligne refusé" 400 "$(api -X POST "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo x\nid"}' "$P/approve")"
+expect "validation sans Content-Type JSON (CSRF)" 415 "$(api -X POST -H 'Content-Type: text/plain' -d '{"session":"ia_pwsh_1","command":"echo x"}' "$P/approve")"
+# Texte déjà saisi (panneau Connexions, frappe en cours) : il serait exécuté avec la commande
+api -X POST "${JSON[@]}" -d '{"text":"echo deja-saisi"}' "$BASE/api/workspaces/ia/sessions/ia_pwsh_1/input" >/dev/null
+sleep 1
+expect "validation refusée si la ligne n'est pas vide" 409 "$(api -X POST "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo x"}' "$P/approve")"
+# PSReadLine (mode Windows) : Échap efface la ligne ; Ctrl+U y insère un caractère littéral
+docker exec "$NAME" tmux send-keys -t '=ia_pwsh_1:' Escape
+sleep 1
+sse=$(docker exec "$NAME" curl -sN --max-time 60 "${AUTH[@]}" "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo cloudbox-fake-ok"}' "$P/approve")
+if grep -q '^event: executed' <<<"$sse" && grep -q 'Résultat : ' <<<"$sse"; then
+    pass "commande validée : exécutée, sortie relue"
+else
+    fail "validation : $(head -c 400 <<<"$sse")"
+    # Diagnostic : état du panneau tmux et journal de l'API
+    docker exec "$NAME" tmux display-message -p -t '=ia_pwsh_1:' 'cmd=#{pane_current_command} x=#{cursor_x} y=#{cursor_y} signal=#{@cloudbox_prompt}'
+    docker exec "$NAME" tmux capture-pane -p -t '=ia_pwsh_1:' | cat -A | tail -n 8
+    docker logs "$NAME" 2>&1 | grep 'cloudbox-api' | tail -n 5
+fi
+expect "commande exécutée dans le terminal" 1 "$(docker exec "$NAME" tmux capture-pane -p -t '=ia_pwsh_1:' | grep -c '^cloudbox-fake-ok')"
+grep -q '"exitCode":0' <<<"$sse" && pass "fin de commande signalée par le prompt (code de sortie)" || fail "signal du prompt absent : $(grep executed -A1 <<<"$sse" | tail -c 300)"
+expect "seconde validation refusée" 409 "$(api -X POST "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo x"}' "$P/approve")"
+expect "clés API absentes de l'environnement des terminaux" 0 "$(docker exec "$NAME" tmux show-environment -g | grep -c '_API_KEY')"
+expect "DELETE workspace ia" 204 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/ia")"
+expect "conversations supprimées avec le workspace" "absent" "$(docker exec "$NAME" test -e /home/dev/.cloudbox/assistant/workspaces/ia && echo present || echo absent)"
+docker exec "$NAME" pkill -f fake-provider.ts
+
 section "Terminal web et session tmux"
 out=$(probe "$BASE/term/pwsh/ws" "$TOKEN" "$BASE" '$cloudboxProbe = "persistant-42"; "PS=" + $PSVersionTable.PSVersion.Major')
 grep -q 'PS=7' <<<"$out" && pass "/term/pwsh/ ouvre PowerShell 7" || fail "/term/pwsh/ : PowerShell 7 non détecté"
@@ -203,7 +263,7 @@ if docker exec "$NAME" sudo -n true >/dev/null 2>&1; then fail "sudo accepté pa
 expect "docker exec : pwsh en dev" "dev" "$(docker exec "$NAME" pwsh -NoProfile -Command '[Environment]::UserName' | tr -d '\r')"
 
 section "Jeton généré (sans CLOUDBOX_TOKEN)"
-docker run -d --name "$NAME-gen" "$IMAGE" >/dev/null
+docker run -d --name "$NAME-gen" -e CLOUDBOX_ASSISTANT=off "$IMAGE" >/dev/null
 if wait_healthy "$NAME-gen"; then
     gen=$(docker exec "$NAME-gen" cat /home/dev/.cloudbox/token)
     [[ $gen =~ ^[0-9a-f]{64}$ ]] && pass "jeton généré (64 caractères hexadécimaux)" || fail "jeton généré invalide"
@@ -211,6 +271,7 @@ if wait_healthy "$NAME-gen"; then
     docker logs "$NAME-gen" 2>&1 | grep "Jeton d'accès : $gen" >/dev/null && pass "jeton affiché dans les logs" || fail "jeton absent des logs"
     expect "perms du fichier jeton" "600" "$(docker exec "$NAME-gen" stat -c %a /home/dev/.cloudbox/token)"
     expect "GET / avec le jeton généré" 200 "$(docker exec "$NAME-gen" curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $gen" "$BASE/")"
+    expect "CLOUDBOX_ASSISTANT=off : assistant interdit" 403 "$(docker exec "$NAME-gen" curl -s -o /dev/null -w '%{http_code}' -X PUT -H "Authorization: Bearer $gen" -H 'Content-Type: application/json' -d '{"enabled":true}' "$BASE/api/assistant/config")"
 else
     fail "le container sans CLOUDBOX_TOKEN ne démarre pas"
 fi

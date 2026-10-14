@@ -17,8 +17,9 @@ COPY image/web/portal/package.json image/web/portal/package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY image/web/portal/ ./
 COPY image/web/api/ /src/api/
-# Contrôle de types du portail et de l'API, puis build
-RUN npm run build
+# Contrôle de types du portail et de l'API, tests unitaires de l'API, puis build
+RUN npm run build \
+ && node --test /src/api/test/*.test.ts
 
 FROM ${BASE_IMAGE}
 
@@ -108,7 +109,8 @@ RUN --mount=type=bind,source=image/cli/build,target=/build \
 COPY --chmod=0755 image/web/rootfs/usr/local/bin/ /usr/local/bin/
 COPY image/web/rootfs/etc/ /etc/
 COPY --from=portal /src/portal/dist/ /srv/portal/
-COPY image/web/api/server.ts image/web/api/package.json /usr/lib/cloudbox-api/
+# API : server.ts, lib.ts, assistant/ ; test/ sert au test de fumée (faux fournisseur d'IA)
+COPY image/web/api/ /usr/lib/cloudbox-api/
 RUN chmod 0755 /etc/s6-overlay/scripts/* /etc/s6-overlay/s6-rc.d/*/run \
  && caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
  # s6-overlay tourne en dev (USER) : /run doit lui appartenir

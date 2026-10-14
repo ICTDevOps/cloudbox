@@ -197,6 +197,8 @@ Settings (`.env` file next to `compose.yaml`, ignored by git; template: `.env.ex
 | `CLOUDBOX_SHELL` | `pwsh` | Default shell: `cloudbox-shell`, VS Code integrated terminal |
 | `CLOUDBOX_MODE` | `web` | `shell`: no web service, for wslc or `docker exec` |
 | `TZ` | `Europe/Paris` | Time zone |
+| `CLOUDBOX_ASSISTANT` | (empty) | `off` forbids the AI assistant on this machine |
+| `CLOUDBOX_OPENROUTER_API_KEY`, `CLOUDBOX_ANTHROPIC_API_KEY`, `CLOUDBOX_OPENAI_API_KEY` | (empty) | Optional AI assistant keys (they can also be entered in the portal) |
 
 Terminal without a browser: `docker exec -it cloudbox pwsh`, `docker exec -it cloudbox bash` or
 `docker exec -it cloudbox cloudbox-shell` (shell chosen by `CLOUDBOX_SHELL`). The tmux sessions
@@ -272,6 +274,39 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 > workspaces**, which the portal points out ("shared across workspaces"). Per-workspace identity
 > isolation is step 3 of the roadmap.
 
+## AI assistant (optional)
+
+Each workspace can open an **Assistant** panel that helps during the session: it reads the actual
+context, the workspace terminals and files, and proposes commands that you approve.
+
+- **Disabled by default.** Enable it from **AI assistant** in the sidebar, enter an API key and
+  pick a default model (the list is read from the provider). `CLOUDBOX_ASSISTANT=off` forbids it.
+- **Providers (API key):** OpenRouter, Anthropic, OpenAI, and any OpenAI-compatible endpoint
+  (Azure OpenAI with its `api-key` header, a company gateway). Keys are stored in the volume
+  (`~/.cloudbox/assistant/config.json`, mode 600) or given as environment variables; they never go
+  back to the browser and are not exported into the web terminals or VS Code. They remain
+  readable by the `dev` user inside the container (the file, `docker exec` shells): the container
+  is yours, this only keeps them out of what the assistant reads, and they are masked if they
+  ever appear in a terminal.
+- **Claude (Pro, Max) and ChatGPT subscriptions** cannot be used by this panel: their token is
+  reserved for the vendor's own applications. A planned "Agent CLI" panel will run Claude Code or
+  Codex CLI in a workspace terminal for that.
+- **Per-workspace context:** the `AGENTS.md` file of the workspace folder (your instructions:
+  conventions, important resources, what never to do), a memory the assistant can add notes to
+  (editable from the panel), separate conversations, the declared environment and settings, and
+  the actual context read at every exchange. Deleting the workspace deletes its conversations and
+  memory, not `AGENTS.md`.
+- **Commands are only proposed.** A card shows the command (editable), the target terminal and
+  the actual context, in red when the az tenant or subscription differs from the workspace one;
+  a PRD workspace also requires a confirmation box. After **Run**, the command is typed and run
+  in your terminal (it uses the PowerShell sessions you already opened: Graph, Exchange…) and the
+  assistant reads the output and the exit status. **Reject** tells it why.
+- **What is sent to the provider:** your messages, the workspace environment and settings, its
+  `AGENTS.md` and memory, the actual context (subscription, tenant, cluster) and what the
+  assistant reads (terminal output, files). Recognised secrets (tokens, keys, passwords,
+  connection strings, SAS, device codes…) are masked before sending and before saving; this is
+  pattern-based, so never paste a secret.
+
 ## Signing in to the services (device code)
 
 In a workspace, the **Connections** panel provides these commands already completed (tenant,
@@ -323,7 +358,11 @@ own infrastructure is allowed. OpenTofu (MPL 2.0) is installed alongside.
   `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
 - API writes are JSON only (no cross-origin "simple" request); workspace sign-in values follow
   strict character sets, and text typed into a terminal by the portal rejects any control
-  character: it is never run without the user pressing Enter.
+  character: it is never run without the user pressing Enter. The one exception is a command
+  proposed by the AI assistant, run only after you click **Run** on its card (plus a confirmation
+  in PRD).
+- AI assistant: disabled by default, API keys kept server-side, secrets masked before anything is
+  sent to the provider (see [AI assistant](#ai-assistant-optional)).
 - Non-root `dev` user (uid 1000), including for s6-overlay and the services. `sudo` is disabled
   by default; `CLOUDBOX_SUDO=true` can only be set when the container is created (the variable is
   read from the environment of PID 1).

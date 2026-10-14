@@ -1,5 +1,5 @@
 // Disposition d'un workspace avec Dockview : panneaux PowerShell, Bash et VS Code (iframes de même
-// origine), sauvegardée dans le volume par cloudbox-api.
+// origine) et Assistant (composant Preact du portail), sauvegardée dans le volume par cloudbox-api.
 //
 // Règles :
 //  - chaque panneau terminal garde son numéro (paramètre n), donc sa session tmux
@@ -25,14 +25,16 @@ import 'dockview/dist/styles/dockview.css';
 import { api, type Workspace } from './api';
 import { t } from './i18n';
 
-export type PanelKind = 'pwsh' | 'bash' | 'code';
+export type PanelKind = 'pwsh' | 'bash' | 'code' | 'assistant';
+type TerminalKind = 'pwsh' | 'bash';
 
 interface PanelParams {
   kind: PanelKind;
   n?: number;
 }
 
-const TITLES: Record<PanelKind, string> = { pwsh: 'PowerShell', bash: 'Bash', code: 'VS Code' };
+const TITLES: Record<PanelKind, string> = { pwsh: 'PowerShell', bash: 'Bash', code: 'VS Code', assistant: 'Assistant' };
+const ICONS: Record<PanelKind, string> = { pwsh: '>_', bash: '$_', code: '{ }', assistant: '✦' };
 const SAVE_DELAY_MS = 600;
 // Raccourci du panneau Connexions, émis aussi depuis les terminaux (qui ont le focus clavier)
 export const CONNECTIONS_EVENT = 'cloudbox:connections';
@@ -44,12 +46,19 @@ export function isConnectionsShortcut(e: KeyboardEvent): boolean {
 export interface TerminalRef {
   panelId: string;
   title: string;
-  kind: 'pwsh' | 'bash';
+  kind: TerminalKind;
   session: string;
 }
 
+function isTerminal(kind: PanelKind): kind is TerminalKind {
+  return kind === 'pwsh' || kind === 'bash';
+}
+
+// Rendu du panneau Assistant dans l'élément fourni ; renvoie la fonction de démontage
+export type AssistantRenderer = (element: HTMLElement) => () => void;
+
 function panelTitle(p: PanelParams): string {
-  return p.kind === 'code' ? TITLES.code : `${TITLES[p.kind]} ${p.n}`;
+  return isTerminal(p.kind) ? `${TITLES[p.kind]} ${p.n}` : TITLES[p.kind];
 }
 
 // Contenu d'un panneau : une iframe vers /term/<shell>/?arg=<workspace>~<n> ou /code/?folder=…
@@ -93,6 +102,27 @@ class FramePanel implements IContentRenderer {
   }
 }
 
+// Contenu du panneau Assistant : composant Preact monté dans l'élément du panneau
+class AssistantPanel implements IContentRenderer {
+  readonly element = document.createElement('div');
+  private readonly renderer: AssistantRenderer;
+  private unmount: (() => void) | null = null;
+
+  constructor(renderer: AssistantRenderer) {
+    this.renderer = renderer;
+    this.element.className = 'panel-assistant';
+  }
+
+  init(): void {
+    this.unmount = this.renderer(this.element);
+  }
+
+  dispose(): void {
+    this.unmount?.();
+    this.unmount = null;
+  }
+}
+
 // Onglet avec sa propre croix : seul chemin qui ferme une session tmux
 class ClosableTab implements ITabRenderer {
   readonly element = document.createElement('div');
@@ -107,14 +137,14 @@ class ClosableTab implements ITabRenderer {
     const p = parameters.params as unknown as PanelParams;
     const icon = document.createElement('span');
     icon.className = `cb-tab-icon ${p.kind}`;
-    icon.textContent = p.kind === 'pwsh' ? '>_' : p.kind === 'bash' ? '$_' : '{ }';
+    icon.textContent = ICONS[p.kind];
     const label = document.createElement('span');
     label.className = 'cb-tab-label';
     label.textContent = panelTitle(p);
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'cb-tab-close';
-    close.title = p.kind === 'code' ? t().dock.closeCode : t().dock.closeTerminal;
+    close.title = p.kind === 'code' ? t().dock.closeCode : p.kind === 'assistant' ? t().dock.closeAssistant : t().dock.closeTerminal;
     close.setAttribute('aria-label', close.title);
     close.textContent = '×';
     // Ne pas déclencher le glisser-déposer de l'onglet
@@ -155,19 +185,20 @@ function installDragGuard(root: HTMLElement): () => void {
 export interface DockHandle {
   addPanel(kind: PanelKind): void;
   hasCode(): boolean;
+  hasAssistant(): boolean;
   // Dernier terminal utilisé, compatible avec le shell demandé
-  terminalFor(shell: 'any' | 'pwsh'): TerminalRef | null;
+  terminalFor(shell: 'any' | TerminalKind): TerminalRef | null;
   // Active un panneau et donne le focus clavier à son terminal
   focusPanel(panelId: string): void;
-  onChange(listener: () => void): void;
+  onChange(listener: () => void): () => void;
   dispose(): void;
 }
 
-export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: string) => void): DockHandle {
+export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: string) => void, renderAssistant: AssistantRenderer): DockHandle {
   let restoring = true;
   let disposed = false;
   let saveTimer = 0;
-  const listeners: (() => void)[] = [];
+  const listeners = new Set<() => void>();
   // Panneaux par ordre d'utilisation, le plus récent en premier
   let recent: string[] = [];
   const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -175,7 +206,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   const closePanel = async (parameters: TabPartInitParameters) => {
     const p = parameters.params as unknown as PanelParams;
     const panel = parameters.api;
-    if (p.kind !== 'code') {
+    if (isTerminal(p.kind)) {
       const session = `${ws.id}_${p.kind}_${p.n}`;
       const ok = window.confirm(t().dock.confirmClose(panelTitle(p), session));
       if (!ok) return;
@@ -191,7 +222,8 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
 
   const dockApi: DockviewApi = createDockview(root, {
     theme: dark ? themeDark : themeLight,
-    createComponent: () => new FramePanel(ws, (id) => touch(id)),
+    createComponent: (options) =>
+      options.name === 'assistant' ? new AssistantPanel(renderAssistant) : new FramePanel(ws, (id) => touch(id)),
     createTabComponent: () => new ClosableTab(closePanel),
     defaultTabComponent: 'cloudbox-tab',
     // Les iframes ne doivent pas être déplacées dans le DOM (elles se rechargeraient)
@@ -208,10 +240,19 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   };
 
   const add = async (kind: PanelKind, position?: { referencePanel: string; direction: 'right' | 'below' }) => {
-    const params: PanelParams = kind === 'code' ? { kind } : { kind, n: await api.allocatePanel(ws.id) };
+    const params: PanelParams = isTerminal(kind) ? { kind, n: await api.allocatePanel(ws.id) } : { kind };
     if (disposed) return;
-    const id = kind === 'code' ? 'code' : `${kind}-${params.n}`;
-    dockApi.addPanel({ id, component: 'frame', title: panelTitle(params), params: { ...params }, position });
+    const id = isTerminal(kind) ? `${kind}-${params.n}` : kind;
+    // L'assistant s'ouvre à droite de toute la disposition
+    const where = kind === 'assistant' && !position ? { direction: 'right' as const } : position;
+    dockApi.addPanel({
+      id,
+      component: kind === 'assistant' ? 'assistant' : 'frame',
+      title: panelTitle(params),
+      params: { ...params },
+      position: where,
+      ...(kind === 'assistant' ? { initialWidth: 420 } : {}),
+    });
   };
 
   const defaultLayout = async () => {
@@ -232,7 +273,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   const terminalRef = (id: string): TerminalRef | null => {
     const panel = dockApi.getPanel(id);
     const p = panel?.params as PanelParams | undefined;
-    if (!panel || !p || p.kind === 'code') return null;
+    if (!panel || !p || !isTerminal(p.kind)) return null;
     return { panelId: id, title: panelTitle(p), kind: p.kind, session: `${ws.id}_${p.kind}_${p.n}` };
   };
 
@@ -276,8 +317,9 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
 
   return {
     addPanel(kind) {
-      if (kind === 'code' && dockApi.getPanel('code')) {
-        dockApi.getPanel('code')?.api.setActive();
+      // VS Code et l'assistant : un seul panneau par workspace
+      if (!isTerminal(kind) && dockApi.getPanel(kind)) {
+        dockApi.getPanel(kind)?.api.setActive();
         return;
       }
       add(kind)
@@ -285,6 +327,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
         .catch((err: Error) => onError(err.message));
     },
     hasCode: () => Boolean(dockApi.getPanel('code')),
+    hasAssistant: () => Boolean(dockApi.getPanel('assistant')),
     terminalFor(shell) {
       // Ordre : terminaux récemment utilisés, puis les autres dans l'ordre de la disposition
       const ids = [...recent, ...dockApi.panels.map((p) => p.id).filter((id) => !recent.includes(id))];
@@ -305,7 +348,8 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
       }
     },
     onChange(listener) {
-      listeners.push(listener);
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
     },
     dispose() {
       window.clearTimeout(saveTimer);

@@ -1,6 +1,7 @@
 // Barre latérale : accueil, workspaces existants, création, déconnexion. Repliable (mémorisé).
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ENV_LABELS } from './api';
+import { AiSettingsForm } from './ai-settings';
 import { getLang, LANGS, setLang, t } from './i18n';
 import { CreateWorkspace, NEW_WORKSPACE_EVENT } from './home';
 import { useWorkspaces, workspaceStore } from './store';
@@ -28,6 +29,13 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const dialog = useRef<HTMLDialogElement>(null);
   const [dialogKey, setDialogKey] = useState(0);
+  const aiDialog = useRef<HTMLDialogElement>(null);
+  const [aiKey, setAiKey] = useState(0);
+
+  const openAi = () => {
+    setAiKey((k) => k + 1);
+    aiDialog.current?.showModal();
+  };
 
   const openCreate = () => {
     setDialogKey((k) => k + 1); // formulaire vierge à chaque ouverture
@@ -97,6 +105,10 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
       </button>
 
       <div class="sidebar-foot">
+        <button type="button" class="nav-item" onClick={openAi} title={t().ai.open}>
+          <span class="nav-icon" aria-hidden="true">✦</span>
+          <span class="label">{t().ai.open}</span>
+        </button>
         <div class="lang-switch" role="group" aria-label={m.language}>
           {LANGS.map((l) => (
             <button type="button" key={l} class={getLang() === l ? 'active' : ''} aria-pressed={getLang() === l}
@@ -118,6 +130,10 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
           workspaceStore.reload();
           window.location.hash = `#/w/${id}`;
         }} />
+      </dialog>
+      <dialog class="create-dialog settings-dialog" ref={aiDialog} aria-label={t().ai.title}>
+        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => aiDialog.current?.close()}>×</button>
+        {aiKey > 0 && <AiSettingsForm key={aiKey} onClose={() => aiDialog.current?.close()} />}
       </dialog>
     </nav>
   );

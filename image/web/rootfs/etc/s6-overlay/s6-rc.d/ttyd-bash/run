@@ -3,6 +3,8 @@
 # cloudbox-term lance ou rattache la session tmux (fermer l'onglet ne tue pas le shell) ;
 # --url-arg transmet ?arg=<workspace>~<n> pour les panneaux des workspaces (validé par cloudbox-term).
 unset CLOUDBOX_TOKEN
+# Clés API de l'assistant : réservées à cloudbox-api, jamais visibles dans un shell
+for v in $(compgen -e | grep -E '^CLOUDBOX_[A-Z0-9_]+_API_KEY$'); do unset "$v"; done
 socket=/run/cloudbox/ttyd-bash.sock
 rm -f "$socket"
 cd /home/dev
