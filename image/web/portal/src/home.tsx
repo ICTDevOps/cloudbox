@@ -1,9 +1,12 @@
 // Accueil : présentation des outils (PowerShell, Bash, VS Code), astuces et versions de l'image.
 // Les workspaces (liste, création) sont dans la barre latérale, les connexions dans chaque workspace.
 import { useEffect, useState } from 'preact/hooks';
-import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type ToolVersion } from './api';
+import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type PanelKind, type ToolVersion } from './api';
+import { useAssistantConfig } from './assistant';
 import { ContextBar } from './context';
 import { getLang, t } from './i18n';
+import { PanelChoice } from './preferences';
+import { usePreferences } from './prefs';
 import { useWorkspaces } from './store';
 
 // Ouvre la fenêtre de création de la barre latérale
@@ -21,7 +24,14 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
   const [name, setName] = useState('');
   const [id, setId] = useState('');
   const [idTouched, setIdTouched] = useState(false);
-  const [env, setEnv] = useState<Env>('dev');
+  // Environnement et panneaux proposés : ceux des préférences, tant que l'utilisateur n'a rien changé
+  const prefs = usePreferences();
+  const assistant = useAssistantConfig();
+  const [envChoice, setEnv] = useState<Env | null>(null);
+  const [panelsChoice, setPanels] = useState<PanelKind[] | null>(null);
+  const env = envChoice ?? prefs?.newWorkspace.env ?? 'dev';
+  const panels = (panelsChoice ?? prefs?.newWorkspace.panels ?? ['pwsh', 'code', 'bash'])
+    .filter((k) => k !== 'assistant' || assistant?.enabled);
   const [folder, setFolder] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,9 +45,13 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
       setError(m.create.invalidId);
       return;
     }
+    if (!panels.length) {
+      setError(m.prefs.atLeastOne);
+      return;
+    }
     setBusy(true);
     try {
-      await api.createWorkspace({ id: effectiveId, name: name.trim(), env, folder: folder.trim() || undefined });
+      await api.createWorkspace({ id: effectiveId, name: name.trim(), env, folder: folder.trim() || undefined, panels });
       onCreated(effectiveId);
     } catch (err) {
       setError((err as Error).message);
@@ -72,6 +86,10 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
         <input value={folder} onInput={(e) => setFolder(e.currentTarget.value)} spellcheck={false}
           placeholder={`/home/dev/workspaces/${effectiveId || m.create.idPlaceholder}`} />
       </label>
+      <fieldset>
+        <legend>{m.create.panels}</legend>
+        <PanelChoice name="create-panels" value={panels} onChange={setPanels} />
+      </fieldset>
       {error && <p class="error" role="alert">{error}</p>}
       <button type="submit" class="button primary" disabled={busy}>{m.create.submit}</button>
     </form>

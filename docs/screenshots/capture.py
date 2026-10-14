@@ -68,6 +68,14 @@ with sync_playwright() as p:
     page.wait_for_selector("dialog[open] .ws-settings")
     page.wait_for_timeout(500)
     page.screenshot(path=f"{OUT}/settings.png")
+    page.click("dialog[open] .dialog-close")
+
+    # Fenêtre Settings de la barre latérale, onglet Assistant IA
+    page.click(".sidebar-foot button.nav-item")
+    page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.wait_for_selector("dialog[open] .ai-provider")
+    page.wait_for_timeout(500)
+    page.screenshot(path=f"{OUT}/preferences.png")
     ctx.close()
 
     # Accueil en thème sombre

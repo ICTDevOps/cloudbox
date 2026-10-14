@@ -22,10 +22,11 @@ import {
   type TabPartInitParameters,
 } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
-import { api, type Workspace } from './api';
+import { api, type PanelKind, type Workspace } from './api';
 import { t } from './i18n';
+import { isDark, onThemeChange } from './prefs';
 
-export type PanelKind = 'pwsh' | 'bash' | 'code' | 'assistant';
+export type { PanelKind };
 type TerminalKind = 'pwsh' | 'bash';
 
 interface PanelParams {
@@ -194,14 +195,19 @@ export interface DockHandle {
   dispose(): void;
 }
 
-export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: string) => void, renderAssistant: AssistantRenderer): DockHandle {
+export function mountDock(
+  root: HTMLElement,
+  ws: Workspace,
+  onError: (message: string) => void,
+  renderAssistant: AssistantRenderer,
+  assistantAvailable: () => Promise<boolean>,
+): DockHandle {
   let restoring = true;
   let disposed = false;
   let saveTimer = 0;
   const listeners = new Set<() => void>();
   // Panneaux par ordre d'utilisation, le plus récent en premier
   let recent: string[] = [];
-  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
   const closePanel = async (parameters: TabPartInitParameters) => {
     const p = parameters.params as unknown as PanelParams;
@@ -221,7 +227,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   };
 
   const dockApi: DockviewApi = createDockview(root, {
-    theme: dark ? themeDark : themeLight,
+    theme: isDark() ? themeDark : themeLight,
     createComponent: (options) =>
       options.name === 'assistant' ? new AssistantPanel(renderAssistant) : new FramePanel(ws, (id) => touch(id)),
     createTabComponent: () => new ClosableTab(closePanel),
@@ -255,11 +261,18 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
     });
   };
 
+  // Première ouverture : panneaux choisis à la création (préférences), à défaut la disposition
+  // historique. Premier terminal à gauche, VS Code à sa droite, terminal suivant en dessous,
+  // assistant à droite de l'ensemble (s'il est activé).
   const defaultLayout = async () => {
-    await add('pwsh');
+    let kinds: PanelKind[] = ws.initialPanels?.length ? ws.initialPanels : ['pwsh', 'code', 'bash'];
+    if (kinds.includes('assistant') && !(await assistantAvailable())) kinds = kinds.filter((k) => k !== 'assistant');
+    const terminals = kinds.filter(isTerminal);
+    if (terminals[0]) await add(terminals[0]);
     const first = dockApi.panels[0]?.id;
-    await add('code', first ? { referencePanel: first, direction: 'right' } : undefined);
-    if (first) await add('bash', { referencePanel: first, direction: 'below' });
+    if (kinds.includes('code')) await add('code', first ? { referencePanel: first, direction: 'right' } : undefined);
+    if (first && terminals[1]) await add(terminals[1], { referencePanel: first, direction: 'below' });
+    if (kinds.includes('assistant')) await add('assistant');
   };
 
   const notify = () => listeners.forEach((l) => l());
@@ -299,6 +312,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   restore().catch((err: Error) => onError(err.message));
 
   const subscriptions = [
+    { dispose: onThemeChange(() => dockApi.updateOptions({ theme: isDark() ? themeDark : themeLight })) },
     dockApi.onDidLayoutChange(() => {
       if (!restoring) save();
       notify();

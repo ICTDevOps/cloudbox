@@ -5,6 +5,7 @@ import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Home } from './home';
 import { useLang } from './i18n';
+import { prefsStore } from './prefs';
 import { Sidebar } from './sidebar';
 import { useWorkspaces } from './store';
 import { WorkspaceView } from './workspace';
@@ -63,4 +64,5 @@ function App() {
   );
 }
 
+prefsStore.reload(); // thème enregistré dans le volume (le cache local est déjà appliqué)
 render(<App />, document.getElementById('app')!);
