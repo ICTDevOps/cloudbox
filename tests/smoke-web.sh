@@ -226,7 +226,8 @@ expect "validation sans Content-Type JSON (CSRF)" 415 "$(api -X POST -H 'Content
 api -X POST "${JSON[@]}" -d '{"text":"echo deja-saisi"}' "$BASE/api/workspaces/ia/sessions/ia_pwsh_1/input" >/dev/null
 sleep 1
 expect "validation refusée si la ligne n'est pas vide" 409 "$(api -X POST "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo x"}' "$P/approve")"
-docker exec "$NAME" tmux send-keys -t '=ia_pwsh_1:' C-u
+# PSReadLine (mode Windows) : Échap efface la ligne ; Ctrl+U y insère un caractère littéral
+docker exec "$NAME" tmux send-keys -t '=ia_pwsh_1:' Escape
 sleep 1
 sse=$(docker exec "$NAME" curl -sN --max-time 60 "${AUTH[@]}" "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo cloudbox-fake-ok"}' "$P/approve")
 if grep -q '^event: executed' <<<"$sse" && grep -q 'Résultat : ' <<<"$sse"; then

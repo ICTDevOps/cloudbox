@@ -182,8 +182,9 @@ export async function terminalIdle(session: string, shell: 'pwsh' | 'bash'): Pro
 }
 
 export function busyError(): HttpError {
-  return new HttpError(409, 'Terminal occupé ou ligne déjà saisie : attendez la fin de la commande, ou videz la ligne (Ctrl+U)',
-    'Terminal busy or line not empty: wait for the command to finish, or clear the line (Ctrl+U)');
+  return new HttpError(409,
+    'Terminal occupé ou ligne déjà saisie : attendez la fin de la commande, ou videz la ligne (Échap dans PowerShell, Ctrl+U dans Bash)',
+    'Terminal busy or line not empty: wait for the command to finish, or clear the line (Esc in PowerShell, Ctrl+U in Bash)');
 }
 
 export interface RunResult {
