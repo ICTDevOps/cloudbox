@@ -5,7 +5,7 @@
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type Workspace } from './api';
-import { AssistantPanel, useAssistantConfig } from './assistant';
+import { AssistantPanel, assistantConfigStore, useAssistantConfig } from './assistant';
 import { ConnectionsDrawer } from './connections';
 import { ContextBar } from './context';
 import { CONNECTIONS_EVENT, isConnectionsShortcut, mountDock, type DockHandle } from './dock';
@@ -52,7 +52,12 @@ function Dock({ ws, onReady, onError }: { ws: Workspace; onReady: (h: DockHandle
         render(null, element);
       };
     };
-    const handle = mountDock(ref.current!, ws, onError, renderAssistant);
+    // Assistant de la disposition initiale : seulement s'il est activé
+    const assistantAvailable = async () => {
+      if (!assistantConfigStore.get()) await assistantConfigStore.reload();
+      return Boolean(assistantConfigStore.get()?.enabled);
+    };
+    const handle = mountDock(ref.current!, ws, onError, renderAssistant, assistantAvailable);
     handleRef.current = handle;
     onReady(handle);
     return () => {

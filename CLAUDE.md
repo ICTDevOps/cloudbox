@@ -160,6 +160,11 @@ Un **workspace** (un client, un projet, un environnement) regroupe des panneaux 
 Bash et VS Code dans une disposition redimensionnable, sauvegardée dans le volume
 (`/home/dev/.cloudbox/workspaces/<id>.json`). Chaque panneau terminal a sa session tmux
 (`<workspace>-<shell>[-n]`), VS Code s'ouvre sur le dossier du workspace.
+La fenêtre « ⚙ Paramètres » de la barre latérale (onglets Général, Workspaces, Assistant IA)
+enregistre les préférences du portail dans `/home/dev/.cloudbox/preferences.json` (`GET/PUT
+/api/preferences`) : thème (auto / clair / sombre, mis en cache dans `localStorage` pour le premier
+rendu), environnement et panneaux proposés à la création. Les panneaux choisis à la création
+(`initialPanels`) donnent la disposition de la première ouverture.
 L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le contexte affiché
 (abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,
 y compris dans le prompt de chaque shell.
@@ -167,7 +172,9 @@ y compris dans le prompt de chaque shell.
 ### Assistant IA
 
 Panneau Dockview « Assistant » (composant Preact), **désactivé par défaut**, activé dans le
-portail (« Assistant IA », barre latérale). `CLOUDBOX_ASSISTANT=off` l'interdit sur le poste.
+portail (« ⚙ Paramètres » de la barre latérale, onglet « Assistant IA »). `CLOUDBOX_ASSISTANT=off`
+l'interdit sur le poste. Modèle par défaut, ou propre au workspace (⚙ du workspace, champ
+`assistant` de son JSON) ; priorité : choix de la conversation > workspace > défaut.
 
 - **Fournisseurs par clé API** : OpenRouter, Anthropic, OpenAI, et tout point d'accès compatible
   OpenAI (Azure OpenAI, passerelle). Clés dans `/home/dev/.cloudbox/assistant/config.json` (0600) ou
@@ -186,7 +193,7 @@ portail (« Assistant IA », barre latérale). `CLOUDBOX_ASSISTANT=off` l'interd
   fait que **proposer**.
 - **Secrets** : masqués par motifs (`assistant/redact.ts`) avant tout envoi et tout enregistrement.
 - Code : `image/web/api/assistant/` (adaptateurs en streaming sans dépendance, boucle d'agent,
-  routes), `image/web/portal/src/assistant.tsx`, `ai-settings.tsx`.
+  routes), `image/web/portal/src/assistant.tsx`, `ai-settings.tsx` (onglet de `preferences.tsx`).
 
 Seul Caddy écoute sur le réseau du container (port 8080). ttyd, code-server et cloudbox-api
 écoutent sur des sockets UNIX à l'intérieur du container, sans authentification propre :

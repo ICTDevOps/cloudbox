@@ -60,9 +60,11 @@ export function abortWorkspace(ws: string): void {
   active.get(ws)?.abort();
 }
 
-function selection(config: AssistantConfig, conv: Conversation, body: Record<string, unknown>) {
-  const providerId = typeof body.provider === 'string' && body.provider ? body.provider : conv.provider ?? config.default?.provider;
-  const model = body.model !== undefined && body.model !== '' ? body.model : conv.model ?? config.default?.model;
+// Priorité : choix envoyé > conversation > workspace > défaut de l'assistant
+function selection(config: AssistantConfig, ws: Workspace, conv: Conversation, body: Record<string, unknown>) {
+  const fallback = ws.assistant ?? config.default;
+  const providerId = typeof body.provider === 'string' && body.provider ? body.provider : conv.provider ?? fallback?.provider;
+  const model = body.model !== undefined && body.model !== '' ? body.model : conv.model ?? fallback?.model;
   if (!providerId || !model) {
     throw new HttpError(400, 'Choisissez un fournisseur et un modèle', 'Choose a provider and a model');
   }
@@ -98,7 +100,7 @@ async function stream(
     if (!res.writableFinished) controller.abort();
   });
   try {
-    const { provider, model } = selection(config, conv, body);
+    const { provider, model } = selection(config, ws, conv, body);
     if (before) await before(sse);
     await runTurn({ ws, conv, provider, model, ctx: await toolContext(ws, body.activeSession), lang: lang(req), sse, signal: controller.signal });
   } catch (err) {
@@ -184,7 +186,7 @@ export async function handleAssistant(req: IncomingMessage, res: ServerResponse,
         throw new HttpError(400, `Message invalide (1 à ${MAX_MESSAGE} caractères)`, `Invalid message (1 to ${MAX_MESSAGE} characters)`);
       }
       const conv = await loadConversation(ws.id, checkConversationId(rest[1]));
-      selection(config, conv, body); // erreurs de choix avant l'ouverture du flux
+      selection(config, ws, conv, body); // erreurs de choix avant l'ouverture du flux
       const controller = begin(ws.id);
       addUserMessage(conv, text);
       await saveConversation(ws.id, conv);
@@ -216,7 +218,7 @@ export async function handleAssistant(req: IncomingMessage, res: ServerResponse,
         }
         if (!(await terminalIdle(session, p.shell))) throw busyError();
       }
-      selection(config, conv, body);
+      selection(config, ws, conv, body);
       const controller = begin(ws.id);
       p.decided = new Date().toISOString();
       if (!approve) {

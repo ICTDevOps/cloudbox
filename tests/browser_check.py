@@ -83,10 +83,33 @@ with sync_playwright() as p:
     check("barre de contexte réel", page.locator(".context-bar .chip").count() >= 3)
     page.screenshot(path=f"{OUT}/1-accueil.png", full_page=True)
 
+    # --- Fenêtre Paramètres : thème, panneaux d'un nouveau workspace, assistant ---
+    page.click(".sidebar-foot button.nav-item")
+    page.wait_for_selector("dialog[open] .prefs")
+    check("onglets des paramètres", page.locator("dialog[open] .prefs-tabs button").count() == 3)
+    page.click("dialog[open] .seg-choice label:has(input[name=prefs-theme]) >> nth=2")
+    page.locator("html[data-theme=dark]").wait_for(state="attached", timeout=5000)
+    check("thème sombre forcé", True)
+    page.click("dialog[open] .seg-choice label:has(input[name=prefs-theme]) >> nth=0")
+    page.locator("html:not([data-theme])").wait_for(state="attached", timeout=5000)
+    page.click("dialog[open] .prefs-tabs button >> nth=1")
+    checked = page.locator("dialog[open] input[name=prefs-panels]:checked").count()
+    check("panneaux par défaut cochés", checked == 3, str(checked))
+    check("assistant désactivé : case grisée",
+          page.locator("dialog[open] .panel-option.disabled input[name=prefs-panels]").count() == 1)
+    page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.wait_for_selector("dialog[open] .ai-enable")
+    check("onglet Assistant IA : fournisseurs masqués tant qu'il est désactivé",
+          page.locator("dialog[open] .ai-provider").count() == 0)
+    page.screenshot(path=f"{OUT}/1b-parametres.png")
+    page.click("dialog[open] .prefs-tabs button >> nth=0")  # onglet mémorisé : retour à Général
+    page.click("dialog[open] .dialog-close")
+
     # --- Création d'un workspace PRD depuis la barre latérale ---
     page.click(".sidebar .nav-new")
     form = "dialog[open] .create-ws"
     page.wait_for_selector(form)
+    check("panneaux proposés à la création", page.locator(f"{form} input[name=create-panels]:checked").count() == 3)
     page.fill(f"{form} input >> nth=0", "Client démo PRD")
     check("identifiant proposé", page.input_value(f"{form} input >> nth=1") == WS_ID,
           page.input_value(f"{form} input >> nth=1"))

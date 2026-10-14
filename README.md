@@ -23,8 +23,10 @@ docker logs cloudbox   # access token, then open http://localhost:8080
 |---|---|
 | ![Home page: tools and versions of the image](docs/screenshots/home.png) | ![Connections panel: sign-in commands completed with the workspace tenant](docs/screenshots/connections.png) |
 | **Home**: the three tools of every workspace, terminal tips and the version of each tool in the image. | **Connections**: device-code sign-in commands completed with the workspace settings, typed into a terminal without being run. |
-| ![Workspace settings](docs/screenshots/settings.png) | ![Home page, dark theme](docs/screenshots/home-dark.png) |
-| **Workspace settings**: name, environment (DEV / ACC / PRD), tenant, subscription, SharePoint URL, ClientId. | **Dark theme**, following the system setting. The interface is available in English and French. |
+| ![Workspace settings](docs/screenshots/settings.png) | ![Settings window, AI assistant tab](docs/screenshots/preferences.png) |
+| **Workspace settings**: name, environment (DEV / ACC / PRD), tenant, subscription, SharePoint URL, ClientId. | **Settings**: language, theme, panels of new workspaces, and the AI assistant (API keys, default model). |
+| ![Home page, dark theme](docs/screenshots/home-dark.png) | |
+| **Dark theme**, following the system setting or chosen in Settings. The interface is available in English and French. | |
 
 The screenshots are produced by [`docs/screenshots/capture.sh`](docs/screenshots/capture.sh)
 (headless Chromium on a throwaway container with sample workspaces).
@@ -245,7 +247,11 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 
 - A sidebar, always visible, lists the workspaces (coloured by environment) and creates new
   ones: name, ID, **DEV / ACC / PRD** environment, working folder (by default
-  `/home/dev/workspaces/<id>`). It collapses to a column of icons.
+  `/home/dev/workspaces/<id>`) and the panels to open (PowerShell, Bash, VS Code, Assistant).
+  It collapses to a column of icons.
+- **Settings** (⚙ at the bottom of the sidebar), stored in the volume
+  (`~/.cloudbox/preferences.json`): language, theme (system, light, dark), the environment and
+  panels suggested for new workspaces, and the [AI assistant](#ai-assistant-optional).
 - Switching between workspaces reloads nothing: the last four opened stay loaded (terminals and
   VS Code), marked by a blue dot in the sidebar.
 - The layout is saved automatically in the volume (`~/.cloudbox/workspaces/<id>.json`) and
@@ -254,9 +260,9 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
   the browser tab or moving a panel does not stop it. Only the cross on a tab (with confirmation)
   closes the session. Deleting a workspace (⚙ Settings) closes its sessions but **keeps its
   folder**.
-- **Settings** (⚙ button): name, environment and the workspace sign-in values (tenant,
-  subscription, SharePoint URL, ClientId of the Entra application used by PnP and CLI for
-  Microsoft 365).
+- **Workspace settings** (⚙ button of the workspace): name, environment, the workspace sign-in
+  values (tenant, subscription, SharePoint URL, ClientId of the Entra application used by PnP and
+  CLI for Microsoft 365) and, if the assistant is enabled, a model for this workspace.
 - **Connections** (button on the right of the toolbar, or Ctrl+Shift+K, including from a
   terminal): panel of sign-in commands, completed with the workspace settings. Each command can
   be copied, or typed with one click into the last terminal used (a PowerShell terminal for
@@ -279,8 +285,9 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 Each workspace can open an **Assistant** panel that helps during the session: it reads the actual
 context, the workspace terminals and files, and proposes commands that you approve.
 
-- **Disabled by default.** Enable it from **AI assistant** in the sidebar, enter an API key and
-  pick a default model (the list is read from the provider). `CLOUDBOX_ASSISTANT=off` forbids it.
+- **Disabled by default.** Enable it in **Settings → AI assistant** (sidebar), enter an API key and
+  pick a default model (the list is read from the provider). A workspace can use its own model
+  (workspace ⚙), for instance a cheaper one in DEV. `CLOUDBOX_ASSISTANT=off` forbids it.
 - **Providers (API key):** OpenRouter, Anthropic, OpenAI, and any OpenAI-compatible endpoint
   (Azure OpenAI with its `api-key` header, a company gateway). Keys are stored in the volume
   (`~/.cloudbox/assistant/config.json`, mode 600) or given as environment variables; they never go

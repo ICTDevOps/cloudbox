@@ -13,6 +13,7 @@ import { CopyButton } from './connections';
 import { useCloudContext } from './context';
 import type { DockHandle } from './dock';
 import { t, useLang } from './i18n';
+import { openSettings } from './prefs';
 
 // --- Configuration (partagée par les panneaux et la barre d'outils) ---
 
@@ -258,12 +259,12 @@ export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => 
     });
   }, [cfg?.enabled, ws.id]);
 
-  // Fournisseur et modèle : ceux de la conversation, sinon ceux par défaut
+  // Fournisseur et modèle : ceux de la conversation, sinon ceux du workspace, sinon ceux par défaut
   useEffect(() => {
-    const def = state?.default ?? cfg?.default ?? null;
+    const def = ws.assistant ?? state?.default ?? cfg?.default ?? null;
     setProvider(conv?.provider ?? def?.provider ?? cfg?.providers.find((p) => p.configured)?.id ?? '');
     setModel(conv?.model ?? def?.model ?? '');
-  }, [conv?.id, state, cfg]);
+  }, [conv?.id, state, cfg, ws.assistant?.provider, ws.assistant?.model]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -272,9 +273,10 @@ export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => 
 
   if (!cfg) return <div class="assistant"><p class="muted assistant-empty">{t().common.loading}</p></div>;
   if (!cfg.allowed) return <div class="assistant"><p class="muted assistant-empty">{m.forbidden}</p></div>;
-  if (!cfg.enabled) return <div class="assistant"><p class="muted assistant-empty">{m.disabled}</p></div>;
+  const goSettings = <button type="button" class="button small" onClick={() => openSettings('ai')}>{m.openSettings}</button>;
+  if (!cfg.enabled) return <div class="assistant"><p class="muted assistant-empty">{m.disabled} {goSettings}</p></div>;
   const configured = cfg.providers.filter((p) => p.configured);
-  if (!configured.length) return <div class="assistant"><p class="muted assistant-empty">{m.noProvider}</p></div>;
+  if (!configured.length) return <div class="assistant"><p class="muted assistant-empty">{m.noProvider} {goSettings}</p></div>;
 
   const onEvent = (e: AssistantEvent) => {
     const l = liveRef.current;

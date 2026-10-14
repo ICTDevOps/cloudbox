@@ -1,9 +1,10 @@
 // Barre latérale : accueil, workspaces existants, création, déconnexion. Repliable (mémorisé).
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ENV_LABELS } from './api';
-import { AiSettingsForm } from './ai-settings';
 import { getLang, LANGS, setLang, t } from './i18n';
 import { CreateWorkspace, NEW_WORKSPACE_EVENT } from './home';
+import { PreferencesDialog, readTab } from './preferences';
+import { OPEN_SETTINGS_EVENT, type PrefsTab } from './prefs';
 import { useWorkspaces, workspaceStore } from './store';
 
 const COLLAPSED_KEY = 'cloudbox.sidebar.collapsed';
@@ -29,12 +30,14 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const dialog = useRef<HTMLDialogElement>(null);
   const [dialogKey, setDialogKey] = useState(0);
-  const aiDialog = useRef<HTMLDialogElement>(null);
-  const [aiKey, setAiKey] = useState(0);
+  const prefsDialog = useRef<HTMLDialogElement>(null);
+  const [prefsKey, setPrefsKey] = useState(0);
+  const [prefsTab, setPrefsTab] = useState<PrefsTab>(readTab);
 
-  const openAi = () => {
-    setAiKey((k) => k + 1);
-    aiDialog.current?.showModal();
+  const openPrefs = (tab?: PrefsTab) => {
+    if (tab) setPrefsTab(tab);
+    setPrefsKey((k) => k + 1); // formulaires relus à chaque ouverture
+    if (!prefsDialog.current?.open) prefsDialog.current?.showModal();
   };
 
   const openCreate = () => {
@@ -50,9 +53,13 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
     // Bouton « Créer mon premier workspace » de l'accueil
     const onNew = () => openCreate();
     window.addEventListener(NEW_WORKSPACE_EVENT, onNew);
+    // « Ouvrir les paramètres » depuis un panneau (Assistant non configuré)
+    const onPrefs = (e: Event) => openPrefs((e as CustomEvent<PrefsTab | undefined>).detail);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onPrefs);
     return () => {
       window.removeEventListener('focus', onFocus);
       window.removeEventListener(NEW_WORKSPACE_EVENT, onNew);
+      window.removeEventListener(OPEN_SETTINGS_EVENT, onPrefs);
     };
   }, []);
 
@@ -105,9 +112,9 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
       </button>
 
       <div class="sidebar-foot">
-        <button type="button" class="nav-item" onClick={openAi} title={t().ai.open}>
-          <span class="nav-icon" aria-hidden="true">✦</span>
-          <span class="label">{t().ai.open}</span>
+        <button type="button" class="nav-item" onClick={() => openPrefs()} title={m.settings}>
+          <span class="nav-icon" aria-hidden="true">⚙</span>
+          <span class="label">{m.settings}</span>
         </button>
         <div class="lang-switch" role="group" aria-label={m.language}>
           {LANGS.map((l) => (
@@ -131,9 +138,9 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
           window.location.hash = `#/w/${id}`;
         }} />
       </dialog>
-      <dialog class="create-dialog settings-dialog" ref={aiDialog} aria-label={t().ai.title}>
-        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => aiDialog.current?.close()}>×</button>
-        {aiKey > 0 && <AiSettingsForm key={aiKey} onClose={() => aiDialog.current?.close()} />}
+      <dialog class="create-dialog prefs-dialog" ref={prefsDialog} aria-label={t().prefs.title}>
+        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => prefsDialog.current?.close()}>×</button>
+        {prefsKey > 0 && <PreferencesDialog key={prefsKey} tab={prefsTab} onTab={setPrefsTab} />}
       </dialog>
     </nav>
   );

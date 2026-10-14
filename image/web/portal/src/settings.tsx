@@ -1,7 +1,10 @@
-// Paramètres d'un workspace : nom, environnement et valeurs de connexion (tenant, abonnement,
-// SharePoint, ClientId) reprises par le panneau Connexions. Validation définitive par cloudbox-api.
+// Paramètres d'un workspace : nom, environnement, valeurs de connexion (tenant, abonnement,
+// SharePoint, ClientId) reprises par le panneau Connexions, modèle propre de l'assistant.
+// Validation définitive par cloudbox-api.
 import { useState } from 'preact/hooks';
-import { api, ENV_LABELS, ENVS, type Env, type Workspace, type WorkspaceSettings } from './api';
+import { api, ENV_LABELS, ENVS, type Env, type ModelChoice, type Workspace, type WorkspaceSettings } from './api';
+import { ModelPicker } from './ai-settings';
+import { useAssistantConfig } from './assistant';
 import { t } from './i18n';
 
 type Field = { key: keyof WorkspaceSettings; label: string; placeholder: string; help: string };
@@ -26,6 +29,9 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
   const [name, setName] = useState(ws.name);
   const [env, setEnv] = useState<Env>(ws.env);
   const [values, setValues] = useState<WorkspaceSettings>({ ...ws.settings });
+  const [model, setModel] = useState<ModelChoice | null>(ws.assistant ?? null);
+  const assistant = useAssistantConfig();
+  const aiProviders = assistant?.enabled ? assistant.providers.filter((p) => p.configured) : [];
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const m = t();
@@ -42,8 +48,8 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
       if (v) settings[f.key] = v;
     }
     try {
-      const saved = await api.updateWorkspace(ws.id, { name: name.trim(), env, settings });
-      onSaved({ ...ws, name: saved.name, env: saved.env, settings });
+      const saved = await api.updateWorkspace(ws.id, { name: name.trim(), env, settings, assistant: model });
+      onSaved({ ...ws, name: saved.name, env: saved.env, settings, assistant: model ?? undefined });
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -88,6 +94,14 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
           <span class="field-help">{f.help}</span>
         </label>
       ))}
+      {aiProviders.length > 0 && (
+        <>
+          <h3 class="settings-sub">{m.settings.assistant}</h3>
+          <p class="field-label">{m.settings.ownModel}</p>
+          <ModelPicker providers={aiProviders} value={model} onChange={setModel} allowNone />
+          <span class="field-help">{m.settings.ownModelHelp(assistant?.default?.model ?? '')}</span>
+        </>
+      )}
       <p class="muted field-help">
         {m.settings.fixed(ws.id, ws.folder).map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part))}
       </p>

@@ -1,4 +1,4 @@
-/* Cloudbox — portail. Thème clair / sombre selon le système. */
+/* Cloudbox — portail. Thème clair / sombre selon le système, ou choisi dans les Paramètres. */
 :root {
   --bg: #f5f6f8;
   --surface: #ffffff;
@@ -23,8 +23,9 @@
   --warn-text: #5c4400;
   color-scheme: light dark;
 }
+/* Thème sombre : celui du système (« Système »), ou forcé par data-theme (Paramètres → Général) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #15181c;
     --surface: #1e2227;
     --surface-2: #272c33;
@@ -46,6 +47,29 @@
     --warn-text: #f3d68a;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #15181c;
+  --surface: #1e2227;
+  --surface-2: #272c33;
+  --text: #e6e8eb;
+  --muted: #9aa3ad;
+  --border: #30363d;
+  --accent: #4ea1f3;
+  --accent-text: #0b1520;
+  --code-bg: #272c33;
+  --error: #ff7b72;
+  --pwsh: #5b8fd6;
+  --bash: #5fb865;
+  --code: #a07ce0;
+  --dev: #3f9a45;
+  --acc: #d18a1f;
+  --acc-text: #1b1300;
+  --prd: #e5483a;
+  --warn-bg: #3d3112;
+  --warn-text: #f3d68a;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -412,7 +436,7 @@ kbd {
 .assistant-empty { padding: 1rem; }
 .assistant-bar { display: flex; gap: 0.35rem; align-items: center; padding: 0.4rem 0.6rem 0; }
 .assistant-bar select, .assistant-model, .assistant-input textarea, .assistant-memory textarea, .proposal-cmd,
-.ai-settings input, .ai-settings select {
+.ai-settings input, .ai-settings select, .model-picker input, .model-picker select, .prefs select {
   font: inherit; font-size: 0.85rem; padding: 0.3rem 0.45rem;
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
 }
@@ -464,16 +488,61 @@ kbd {
 .assistant-input textarea { flex: 1; resize: none; }
 .assistant-foot { margin: 0.25rem 0.6rem 0.45rem; }
 
-/* Paramètres de l'assistant IA */
-.ai-settings { max-height: 85vh; overflow: auto; }
+/* Paramètres de l'assistant IA (onglet de la fenêtre Paramètres) */
 .ai-enable { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
-.ai-providers { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
-.ai-provider { border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.65rem; display: grid; gap: 0.4rem; }
+.ai-providers { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.ai-provider { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.65rem; display: grid; gap: 0.4rem; }
+.ai-provider.open { border-color: var(--accent); }
 .ai-provider label { display: grid; gap: 0.15rem; font-size: 0.82rem; }
-.ai-provider-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.ai-key, .ai-default { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.ai-provider-head { display: flex; align-items: center; gap: 0.5rem; }
+.ai-provider-head strong { flex: 1; min-width: 0; }
+.ai-provider-body { display: grid; gap: 0.4rem; }
+.ai-key { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
 .ai-key input { flex: 1; min-width: 12rem; }
-.ai-default input { flex: 1; min-width: 12rem; font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.8rem; }
+.ai-advanced { font-size: 0.82rem; }
+.ai-advanced summary { cursor: pointer; color: var(--muted); }
+.ai-advanced[open] { display: grid; gap: 0.4rem; }
+.ai-advanced .button { justify-self: start; }
+.model-picker { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.model-picker > select:first-child { flex: 0 1 11rem; }
+.model-picker input, .model-picker select:not(:first-child) { flex: 1 1 14rem; min-width: 0; font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.8rem; }
+.model-picker .field-help { flex-basis: 100%; }
+.field-label { margin: 0; font-size: 0.85rem; font-weight: 600; }
+
+/* Fenêtre Paramètres : onglets verticaux, horizontaux sur écran étroit */
+.prefs-dialog { width: min(92vw, 760px); }
+.prefs { box-shadow: 0 12px 40px rgb(0 0 0 / 0.3); display: grid; gap: 0.75rem; }
+.prefs h2 { margin: 0; }
+.prefs-body { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; min-height: 22rem; }
+.prefs-tabs { display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--border); padding-right: 0.6rem; }
+.prefs-tabs button {
+  text-align: left; font: inherit; font-size: 0.9rem; padding: 0.45rem 0.6rem; border: none; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.prefs-tabs button:hover { background: var(--surface-2); color: var(--text); }
+.prefs-tabs button.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); font-weight: 600; }
+.prefs-panel { min-width: 0; max-height: 70vh; overflow: auto; padding-right: 0.25rem; }
+.prefs-section { display: grid; gap: 0.6rem; align-content: start; }
+.prefs-section p, .prefs-section h3 { margin: 0; }
+.prefs-section fieldset { border: none; margin: 0; padding: 0; }
+.prefs-section legend, .create-ws fieldset legend { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; padding: 0; }
+.create-ws fieldset { border: none; margin: 0; padding: 0; }
+.seg-choice { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.seg-choice label, .panel-option {
+  display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; font-weight: 600;
+  padding: 0.3rem 0.7rem; border: 2px solid var(--border); border-radius: 6px; cursor: pointer;
+}
+.seg-choice label.selected, .panel-option.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.seg-choice input, .panel-option input { margin: 0; }
+.panel-choice { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.create-ws .panel-option { display: inline-flex; }
+.panel-option.disabled { opacity: 0.55; cursor: default; }
+.warn { margin: 0; padding: 0.35rem 0.6rem; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); font-size: 0.85rem; }
+@media (max-width: 600px) {
+  .prefs-body { grid-template-columns: 1fr; min-height: 0; }
+  .prefs-tabs { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 0 0 0.4rem; }
+  .prefs-tabs button { white-space: nowrap; }
+}
 
 /* Connexion */
 body.login { display: grid; place-items: center; min-height: 100vh; padding: 1rem; }

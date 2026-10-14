@@ -45,6 +45,10 @@ export interface Workspace {
   // même avec plusieurs onglets ouverts sur le workspace
   nextPanel: number;
   settings?: Settings;
+  // Panneaux ouverts à la première ouverture (tant qu'aucune disposition n'est enregistrée)
+  initialPanels?: PanelKind[];
+  // Fournisseur et modèle propres au workspace (sinon le modèle par défaut de l'assistant)
+  assistant?: { provider: string; model: string };
   layout: unknown;
   created: string;
   updated: string;
@@ -162,6 +166,72 @@ export async function resolveFolder(v: unknown, id: string): Promise<string> {
   const real = await realpath(abs);
   if (real !== HOME && !real.startsWith(HOME + '/')) throw new HttpError(400, 'Le dossier doit être sous /home/dev', 'The folder must be under /home/dev');
   return real;
+}
+
+// --- Préférences du portail (communes à tous les workspaces) ---
+
+export const PANEL_KINDS = ['pwsh', 'bash', 'code', 'assistant'] as const;
+export type PanelKind = (typeof PANEL_KINDS)[number];
+export const THEMES = ['auto', 'light', 'dark'] as const;
+export type Theme = (typeof THEMES)[number];
+export const PREFERENCES_FILE = path.join(HOME, '.cloudbox', 'preferences.json');
+
+export interface Preferences {
+  theme: Theme;
+  newWorkspace: { env: Env; panels: PanelKind[] };
+}
+
+export function defaultPreferences(): Preferences {
+  return { theme: 'auto', newWorkspace: { env: 'dev', panels: ['pwsh', 'code', 'bash'] } };
+}
+
+// Panneaux d'un nouveau workspace : au moins un, sans doublon, dans l'ordre reçu
+export function checkPanels(v: unknown): PanelKind[] {
+  const ok = Array.isArray(v) && v.length >= 1 && v.length <= PANEL_KINDS.length
+    && v.every((k) => typeof k === 'string' && (PANEL_KINDS as readonly string[]).includes(k))
+    && new Set(v).size === v.length;
+  if (!ok) throw new HttpError(400, 'Panneaux invalides (pwsh, bash, code, assistant ; au moins un)', 'Invalid panels (pwsh, bash, code, assistant; at least one)');
+  return v as PanelKind[];
+}
+
+export function checkTheme(v: unknown): Theme {
+  if (typeof v === 'string' && (THEMES as readonly string[]).includes(v)) return v as Theme;
+  throw new HttpError(400, 'Thème invalide (auto, light ou dark)', 'Invalid theme (auto, light or dark)');
+}
+
+// Fichier absent ou illisible : valeurs par défaut, champ par champ
+export async function loadPreferences(): Promise<Preferences> {
+  const prefs = defaultPreferences();
+  let data: unknown;
+  try {
+    data = await readJson(PREFERENCES_FILE);
+  } catch {
+    return prefs;
+  }
+  if (!isRecord(data)) return prefs;
+  try { prefs.theme = checkTheme(data.theme); } catch { /* défaut */ }
+  if (isRecord(data.newWorkspace)) {
+    try { prefs.newWorkspace.env = checkEnv(data.newWorkspace.env); } catch { /* défaut */ }
+    try { prefs.newWorkspace.panels = checkPanels(data.newWorkspace.panels); } catch { /* défaut */ }
+  }
+  return prefs;
+}
+
+// Mise à jour partielle : seuls les champs présents sont validés et remplacés
+export function applyPreferences(prefs: Preferences, body: unknown): Preferences {
+  if (!isRecord(body)) throw new HttpError(400, 'Objet JSON attendu', 'JSON object expected');
+  for (const key of Object.keys(body)) {
+    if (key !== 'theme' && key !== 'newWorkspace') throw new HttpError(400, `Préférence inconnue : ${key}`, `Unknown preference: ${key}`);
+  }
+  const next: Preferences = { theme: prefs.theme, newWorkspace: { ...prefs.newWorkspace } };
+  if ('theme' in body) next.theme = checkTheme(body.theme);
+  if ('newWorkspace' in body) {
+    const nw = body.newWorkspace;
+    if (!isRecord(nw)) throw new HttpError(400, 'Préférences de workspace invalides', 'Invalid workspace preferences');
+    if ('env' in nw) next.newWorkspace.env = checkEnv(nw.env);
+    if ('panels' in nw) next.newWorkspace.panels = checkPanels(nw.panels);
+  }
+  return next;
 }
 
 export function stateFile(id: string): string {

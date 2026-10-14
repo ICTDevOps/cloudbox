@@ -22,8 +22,27 @@ export interface WorkspaceSettings {
   clientId?: string;
 }
 
+export type PanelKind = 'pwsh' | 'bash' | 'code' | 'assistant';
+export const PANEL_KINDS: readonly PanelKind[] = ['pwsh', 'bash', 'code', 'assistant'];
+export type Theme = 'auto' | 'light' | 'dark';
+
+// Préférences du portail, communes à tous les workspaces (/home/dev/.cloudbox/preferences.json)
+export interface Preferences {
+  theme: Theme;
+  newWorkspace: { env: Env; panels: PanelKind[] };
+}
+
+export interface ModelChoice {
+  provider: string;
+  model: string;
+}
+
 export interface Workspace extends WorkspaceSummary {
   settings?: WorkspaceSettings;
+  // Panneaux de la première ouverture, tant qu'aucune disposition n'est enregistrée
+  initialPanels?: PanelKind[];
+  // Modèle propre au workspace (sinon le modèle par défaut de l'assistant)
+  assistant?: ModelChoice;
   layout: object | null;
   sessions: string[];
 }
@@ -227,9 +246,12 @@ export const api = {
   context: () => request<CloudContext>('GET', '/api/context'),
   listWorkspaces: () => request<WorkspaceSummary[]>('GET', '/api/workspaces'),
   getWorkspace: (id: string) => request<Workspace>('GET', `/api/workspaces/${id}`),
-  createWorkspace: (data: { id: string; name: string; env: Env; folder?: string }) =>
+  preferences: () => request<Preferences>('GET', '/api/preferences'),
+  updatePreferences: (data: { theme?: Theme; newWorkspace?: Partial<Preferences['newWorkspace']> }) =>
+    request<Preferences>('PUT', '/api/preferences', data),
+  createWorkspace: (data: { id: string; name: string; env: Env; folder?: string; panels?: PanelKind[] }) =>
     request<Workspace>('POST', '/api/workspaces', data),
-  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout' | 'settings'>>) =>
+  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout' | 'settings'>> & { assistant?: ModelChoice | null }) =>
     request<WorkspaceSummary>('PUT', `/api/workspaces/${id}`, data),
   // Numéro de panneau terminal attribué par le serveur (jamais réutilisé, même avec plusieurs onglets)
   allocatePanel: async (id: string) => (await request<{ n: number }>('POST', `/api/workspaces/${id}/panels`)).n,
