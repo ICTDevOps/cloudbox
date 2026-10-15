@@ -6,7 +6,7 @@ and every Azure / Microsoft 365 administration tool, kept up to date.
 
 > **Status: step 2 (workspaces).** The `:cli` and `:web` images build and pass their tests
 > (HTTP and browser). The technical framing and the roadmap are in [`CLAUDE.md`](CLAUDE.md)
-> (in French).
+> (in French)..
 
 ![A production workspace: PowerShell and Bash terminals, VS Code](docs/screenshots/workspace.png)
 
