@@ -22,6 +22,10 @@ export interface WorkspaceSettings {
   clientId?: string;
 }
 
+// Connexions des terminaux d'un workspace : isolées (défaut) ou partagées avec les autres workspaces
+export type IdentityMode = 'isolated' | 'shared';
+export type ContextTool = 'azureCli' | 'azPowerShell' | 'kubernetes' | 'github';
+
 export type PanelKind = 'pwsh' | 'bash' | 'code' | 'assistant';
 export const PANEL_KINDS: readonly PanelKind[] = ['pwsh', 'bash', 'code', 'assistant'];
 export type Theme = 'auto' | 'light' | 'dark';
@@ -59,6 +63,8 @@ export interface TerminalState {
   cwd: string;
   command: string;
   idle: boolean;
+  identities: IdentityMode; // fixées à l'ouverture du terminal
+  stale?: boolean; // calculé par le portail : connexions différentes de celles du workspace
 }
 
 export interface ModelChoice {
@@ -72,6 +78,7 @@ export interface Workspace extends WorkspaceSummary {
   initialPanels?: PanelKind[];
   // Modèle propre au workspace (sinon le modèle par défaut de l'assistant)
   assistant?: ModelChoice;
+  identities?: IdentityMode; // absent : isolées
   layout: object | null;
   sessions: string[];
 }
@@ -89,6 +96,8 @@ export interface CloudContext {
   azPowerShell: AzureContext | null;
   kubernetes: { context: string; namespace: string } | null;
   github: { host: string; user: string } | null;
+  identities: IdentityMode;
+  shared: ContextTool[]; // outils dont la connexion est commune à tous les workspaces
   sharedAcrossWorkspaces: boolean;
 }
 
@@ -273,16 +282,21 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   context: () => request<CloudContext>('GET', '/api/context'),
+  workspaceContext: (id: string) => request<CloudContext>('GET', `/api/workspaces/${id}/context`),
   listWorkspaces: () => request<WorkspaceSummary[]>('GET', '/api/workspaces'),
   getWorkspace: (id: string) => request<Workspace>('GET', `/api/workspaces/${id}`),
-  terminals: async (id: string) => (await request<{ terminals: TerminalState[] }>('GET', `/api/workspaces/${id}/terminals`)).terminals,
+  // stale : terminal ouvert avec d'autres connexions que celles du workspace (à rouvrir)
+  terminals: async (id: string) => {
+    const r = await request<{ terminals: TerminalState[]; identities: IdentityMode }>('GET', `/api/workspaces/${id}/terminals`);
+    return r.terminals.map((s) => ({ ...s, stale: s.identities !== r.identities }));
+  },
   preferences: () => request<Preferences>('GET', '/api/preferences'),
   folders: (path: string) => request<FolderList>('GET', `/api/folders?path=${encodeURIComponent(path)}`),
   updatePreferences: (data: { theme?: Theme; newWorkspace?: Partial<Preferences['newWorkspace']>; terminal?: Partial<TerminalPrefs> }) =>
     request<Preferences>('PUT', '/api/preferences', data),
-  createWorkspace: (data: { id: string; name: string; env: Env; folder?: string; panels?: PanelKind[] }) =>
+  createWorkspace: (data: { id: string; name: string; env: Env; folder?: string; panels?: PanelKind[]; identities?: IdentityMode }) =>
     request<Workspace>('POST', '/api/workspaces', data),
-  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout' | 'settings'>> & { assistant?: ModelChoice | null }) =>
+  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'env' | 'layout' | 'settings' | 'identities'>> & { assistant?: ModelChoice | null }) =>
     request<WorkspaceSummary>('PUT', `/api/workspaces/${id}`, data),
   // Numéro de panneau terminal attribué par le serveur (jamais réutilisé, même avec plusieurs onglets)
   allocatePanel: async (id: string) => (await request<{ n: number }>('POST', `/api/workspaces/${id}/panels`)).n,

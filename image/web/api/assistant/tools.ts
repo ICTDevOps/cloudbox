@@ -8,7 +8,7 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  HOME, HttpError, azPowerShellContext, azureCliContext, kubernetesContext, run, sessionPattern, workspaceSessions, type Workspace,
+  HOME, HttpError, cloudContext as readCloudContext, identityMode, run, sessionIdentity, sessionPattern, workspaceSessions, type Workspace,
 } from '../lib.ts';
 import type { ToolSpec } from './providers.ts';
 import { redactText } from './redact.ts';
@@ -92,9 +92,10 @@ function cap(text: string, max = MAX_TOOL_OUTPUT): string {
   return text.length > max ? `[… ${text.length - max} caractères tronqués au début …]\n${text.slice(-max)}` : text;
 }
 
-export async function cloudContext() {
-  const [azureCli, azPowerShell, kubernetes] = await Promise.all([azureCliContext(), azPowerShellContext(), kubernetesContext()]);
-  return { azureCli, azPowerShell, kubernetes, sharedAcrossWorkspaces: true };
+// Contexte réel des terminaux du workspace (connexions isolées ou partagées), sans GitHub
+export async function cloudContext(ws: Workspace) {
+  const { azureCli, azPowerShell, kubernetes, identities, shared, sharedAcrossWorkspaces } = await readCloudContext(ws);
+  return { azureCli, azPowerShell, kubernetes, identities, shared, sharedAcrossWorkspaces };
 }
 
 // --- Terminaux ---
@@ -107,6 +108,15 @@ export async function checkWorkspaceSession(ws: Workspace, session: unknown): Pr
     throw new HttpError(404, 'Session introuvable (terminal fermé ?)', 'Session not found (terminal closed?)');
   }
   return session;
+}
+
+// Terminal dont les connexions ne sont pas celles du workspace (ouvert avant l'isolation ou avant un
+// changement de mode) : le contexte affiché sur la carte ne serait pas celui de la commande
+export async function checkSessionIdentity(ws: Workspace, session: string): Promise<void> {
+  if ((await sessionIdentity(session)) !== identityMode(ws)) {
+    throw new HttpError(409, 'Ce terminal a été ouvert avec d\'autres connexions que celles du workspace : fermez-le puis rouvrez-le',
+      'This terminal was opened with other sign-ins than the workspace ones: close it and open it again');
+  }
 }
 
 function trimBlank(text: string): string {
@@ -263,7 +273,7 @@ export async function runReadTool(name: string, args: Record<string, unknown>, c
   try {
     switch (name) {
       case 'get_context':
-        return JSON.stringify(await cloudContext(), null, 2);
+        return JSON.stringify(await cloudContext(ctx.ws), null, 2);
 
       case 'read_terminal': {
         const session = args.session === undefined ? ctx.activeSession : args.session;

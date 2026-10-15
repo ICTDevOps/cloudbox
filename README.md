@@ -250,7 +250,8 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 - A sidebar, always visible, lists the workspaces (coloured by environment) and creates new
   ones: name, ID, **DEV / ACC / PRD** environment, working folder (by default
   `/home/dev/workspaces/<id>`, typed or picked with the folder button among the non-hidden folders
-  of `/home/dev`) and the panels to open (PowerShell, Bash, VS Code, Assistant).
+  of `/home/dev`), the panels to open (PowerShell, Bash, VS Code, Assistant) and the
+  [sign-ins](#per-workspace-sign-ins) mode (isolated by default).
   It collapses to a column of icons.
 - **Settings** (⚙ at the bottom of the sidebar), stored in the volume
   (`~/.cloudbox/preferences.json`): language, theme (system, light, dark), the environment and
@@ -276,8 +277,8 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
   closes the session.
 - **🗑 Delete** (workspace toolbar, next to ⚙ Settings) asks for a confirmation, and in PRD for the
   workspace ID to be typed. It closes the workspace sessions but **keeps its folder**.
-- **Workspace settings** (⚙ button of the workspace): name, environment, the workspace sign-in
-  values (tenant, subscription, SharePoint URL, ClientId of the Entra application used by PnP and
+- **Workspace settings** (⚙ button of the workspace): name, environment, isolated or shared
+  [sign-ins](#per-workspace-sign-ins), the workspace sign-in values (tenant, subscription, SharePoint URL, ClientId of the Entra application used by PnP and
   CLI for Microsoft 365) and, if the assistant is enabled, a model for this workspace.
 - **Cheat sheet** (button on the right of the toolbar, or Ctrl+Shift+K, including from a
   terminal): panel of sign-in commands, completed with the workspace settings. Each command can
@@ -292,9 +293,37 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
   subscription (`az:`) and, in PowerShell, the Az context (`AzPS:`) once the `Az.Accounts`
   module is loaded: these are two separate contexts.
 
-> **Current limitation:** sign-ins (az, Az PowerShell, kubectl…) are still **shared by all
-> workspaces**, which the portal points out ("shared across workspaces"). Per-workspace identity
-> isolation is step 3 of the roadmap.
+### Per-workspace sign-ins
+
+By default, the sign-ins made in a workspace's terminals **stay in that workspace**: signing in to
+another tenant in a second workspace does not change the first one. Each isolated workspace has
+its own folders in `~/.cloudbox/identities/<id>/`, given to its terminals through:
+
+| Tool | Variable | Isolated |
+|---|---|---|
+| Azure CLI | `AZURE_CONFIG_DIR` | yes |
+| Azure Developer CLI | `AZD_CONFIG_DIR` | yes |
+| GitHub CLI | `GH_CONFIG_DIR` | yes |
+| kubectl, k9s, helm (cluster access) | `KUBECONFIG=<workspace file>:~/.kube/config` | current context; clusters added with `az aks get-credentials` stay in the workspace, those of `~/.kube/config` are visible everywhere (with their namespace, which belongs to the context and is shared) |
+| Helm registries and repositories, kubelogin token cache, Docker credentials | their usual files in `/home/dev` | **no** |
+| Az PowerShell | none available | **no**: `Connect-AzAccount` is common to all workspaces, flagged in the toolbar |
+| CLI for Microsoft 365 | none available | **no** |
+| Graph, Exchange Online, Teams, PnP | in the PowerShell process | per terminal |
+
+- The toolbar shows **🔒 isolated sign-ins**, and the context it displays is the one of the
+  workspace's terminals.
+- **The VS Code terminal is not isolated**: code-server is a single instance for all workspaces,
+  so its terminal uses the common sign-ins, like `docker exec`. Use the workspace's PowerShell and
+  Bash panels for anything tied to a tenant.
+- az extensions stay common to all workspaces (`AZURE_EXTENSION_DIR`); `az config` defaults
+  belong to the workspace.
+- A workspace can be switched to **shared** sign-ins (workspace ⚙, or when creating it): its
+  terminals then use the common configuration, like VS Code's terminal and `docker exec`.
+- The mode is set when a terminal opens. A terminal opened before a mode change (or before this
+  version) keeps its former sign-ins: its prompt and the path bar say so, and the assistant refuses
+  to run a command there. Close it and open it again.
+- Existing workspaces become isolated: sign in once in each of them.
+- Deleting a workspace deletes its sign-ins folder.
 
 ## AI assistant (optional)
 
@@ -345,7 +374,9 @@ subscription, SharePoint URL, ClientId).
 | PnP PowerShell | `Connect-PnPOnline -Url … -DeviceLogin -ClientId <app-id>` |
 | CLI for Microsoft 365 | `m365 login --authType deviceCode` |
 
-Token caches live in `/home/dev` (volume): they survive the recreation of the container.
+Token caches live in `/home/dev` (volume): they survive the recreation of the container. In an
+isolated workspace, az, azd and gh keep theirs in the workspace (see
+[Per-workspace sign-ins](#per-workspace-sign-ins)).
 
 ## Tools
 

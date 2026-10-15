@@ -72,7 +72,7 @@ function envLine(ws: Workspace): string {
 
 async function systemPrompt(o: TurnOptions): Promise<string> {
   const { ws, ctx } = o;
-  const [context, memory, agents] = await Promise.all([cloudContext(), readMemory(ws.id), readAgentsFile(ws)]);
+  const [context, memory, agents] = await Promise.all([cloudContext(ws), readMemory(ws.id), readAgentsFile(ws)]);
   const settings = Object.entries(ws.settings ?? {}).map(([k, v]) => `  - ${k} : ${v}`).join('\n') || '  (aucun)';
   const sessions = ctx.activeSession ? `Terminal actif de l'utilisateur : ${ctx.activeSession}` : 'Aucun terminal ouvert.';
   return [
@@ -89,8 +89,11 @@ async function systemPrompt(o: TurnOptions): Promise<string> {
     `- ${sessions}`,
     '',
     '## Contexte réel (lu à l\'instant, fait foi sur les valeurs déclarées)',
-    'Les connexions az, Az PowerShell et kubectl sont encore partagées entre tous les workspaces : ' +
-      'si l\'abonnement ou le tenant réel diffère de celui déclaré, signale-le avant toute commande.',
+    (context.identities === 'isolated'
+      ? 'Connexions isolées : az, azd, gh et le contexte kubectl sont propres à ce workspace. Az PowerShell ' +
+        '(Connect-AzAccount) reste partagé entre tous les workspaces ; Graph, Exchange, Teams et PnP se connectent terminal par terminal.'
+      : 'Connexions partagées : az, Az PowerShell et kubectl sont communs à tous les workspaces en mode partagé.') +
+      ' Si l\'abonnement ou le tenant réel diffère de celui déclaré, signale-le avant toute commande.',
     '```json',
     JSON.stringify(context, null, 2),
     '```',
@@ -175,7 +178,7 @@ export async function runTurn(o: TurnOptions): Promise<void> {
         sse.send('done', { reason: 'end' });
         return;
       }
-      const context = await cloudContext();
+      const context = await cloudContext(o.ws);
       for (const call of result.toolCalls) {
         if (call.name === 'run_command') {
           const p = proposalFromCall(call.id, call.args);

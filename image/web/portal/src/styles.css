@@ -294,6 +294,10 @@ h2 { font-size: 1.05rem; }
 .chip-off { color: var(--muted); }
 .chip-warn { background: var(--warn-bg); color: var(--warn-text); border-color: color-mix(in srgb, var(--warn-text) 35%, transparent); font-weight: 600; }
 .chip-warn .icon { color: var(--warn-text); }
+/* Connexions isolées du workspace ; outil resté commun (Az PowerShell) marqué dans sa puce */
+.chip-isolated { color: var(--dev); border-color: color-mix(in srgb, var(--dev) 45%, transparent); font-weight: 600; }
+.chip-isolated .icon { color: var(--dev); }
+.chip .icon.chip-shared { color: var(--warn-text); margin-left: 0.15rem; }
 
 /* Badges d'environnement */
 .env-badge {
@@ -503,6 +507,9 @@ kbd {
 }
 .conn-filter:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .conn-settings { margin: 0.5rem 0.9rem 0; font-size: 0.8rem; }
+.conn-identities { display: flex; gap: 0.4rem; align-items: flex-start; margin: 0.5rem 0.9rem 0; font-size: 0.78rem; color: var(--muted); }
+.conn-identities .icon { flex: none; margin-top: 0.1rem; color: var(--dev); }
+.conn-identities.shared .icon { color: var(--warn-text); }
 .conn-message {
   margin: 0.5rem 0.9rem 0; padding: 0.4rem 0.6rem; font-size: 0.8rem; border-radius: 6px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -544,6 +551,23 @@ kbd {
 .ws-settings .env-choice { grid-template-columns: repeat(3, 1fr); }
 .settings-sub { font-size: 0.9rem; margin-top: 0.4rem; }
 .field-help { font-weight: 400; font-size: 0.75rem; color: var(--muted); }
+.field-help.warn { color: var(--warn-text); }
+
+/* Connexions des terminaux : isolées ou partagées (création et paramètres du workspace) */
+.identities-field { border: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.identities-field legend { font-size: 0.88rem; font-weight: 600; padding: 0; margin-bottom: 0.4rem; }
+.identity-choice { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+.identity-option {
+  display: flex !important; align-items: flex-start; gap: 0.6rem;
+  padding: 0.6rem 0.8rem; border: 1px solid var(--border-strong); border-radius: 10px; cursor: pointer; background: var(--field);
+}
+.identity-option input { margin: 0.15rem 0 0; accent-color: var(--accent); width: 1.05rem; height: 1.05rem; flex: none; }
+.identity-option .icon { color: var(--muted); flex: none; margin-top: 0.05rem; }
+.identity-option span { display: grid; gap: 0.15rem; }
+.identity-option small { font-weight: 400; font-size: 0.75rem; color: var(--muted); }
+.identity-option.selected { border-color: var(--accent); background: var(--accent-soft); }
+.identity-option.selected .icon { color: var(--link); }
+@media (max-width: 560px) { .identity-choice { grid-template-columns: 1fr; } }
 
 /* Dockview aux couleurs du portail : groupes en cartes arrondies, onglets avec icône */
 .dock .dockview-theme-dark, .dock.dockview-theme-dark, .dock .dockview-theme-light, .dock.dockview-theme-light {
@@ -606,6 +630,7 @@ kbd {
 .path-crumbs button:disabled { cursor: default; }
 .path-crumbs .outside { color: var(--muted); }
 .path-crumbs .last { font-weight: 700; }
+.path-stale { flex: none; color: var(--warn-text); font-size: 0.72rem; font-weight: 600; white-space: nowrap; cursor: help; }
 .path-busy { flex: none; color: var(--muted); font-size: 0.72rem; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .path-copy { flex: none; border: none; background: transparent; color: var(--muted); cursor: pointer; padding: 0.1rem 0.3rem; border-radius: 4px; }
 .path-copy:hover { color: var(--text); background: var(--surface); }

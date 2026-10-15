@@ -27,7 +27,7 @@ import {
   AGENTS_FILE, checkConversationId, checkProposalId, deleteConversation, ensureAgentsFile, listConversations, loadConversation,
   newConversation, readMemory, saveConversation, writeMemory, type Conversation,
 } from './store.ts';
-import { busyError, checkWorkspaceSession, runApproved, terminalIdle, type ToolContext } from './tools.ts';
+import { busyError, checkSessionIdentity, checkWorkspaceSession, runApproved, terminalIdle, type ToolContext } from './tools.ts';
 
 const MAX_MESSAGE = 16_000;
 
@@ -213,6 +213,7 @@ export async function handleAssistant(req: IncomingMessage, res: ServerResponse,
           throw new HttpError(400, `Commande ${p.shell === 'pwsh' ? 'PowerShell' : 'Bash'} : choisissez un terminal ${p.shell}`,
             `${p.shell === 'pwsh' ? 'PowerShell' : 'Bash'} command: choose a ${p.shell} terminal`);
         }
+        await checkSessionIdentity(ws, session);
         if (ws.env === 'prd' && body.confirmPrd !== true) {
           throw new HttpError(400, 'Workspace PRD : confirmation explicite requise', 'PRD workspace: explicit confirmation required');
         }

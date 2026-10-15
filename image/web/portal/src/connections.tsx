@@ -160,7 +160,7 @@ export function ConnectionsDrawer({ ws, dock, onClose, onEditSettings }: {
   onClose: () => void;
   onEditSettings: () => void;
 }) {
-  const ctx = useCloudContext();
+  const ctx = useCloudContext(ws.id);
   const [filter, setFilter] = useState('');
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -203,6 +203,12 @@ export function ConnectionsDrawer({ ws, dock, onClose, onEditSettings }: {
           : <>{m.fillIn}</>}
         {' '}<button type="button" class="link-button" onClick={onEditSettings}>{t().common.settings}</button>
       </p>
+      {cloud && (
+        <p class={`conn-identities ${cloud.identities}`}>
+          <Icon name={cloud.identities === 'isolated' ? 'lock' : 'share'} size={15} />
+          {cloud.identities === 'isolated' ? m.identitiesIsolated : m.identitiesShared}
+        </p>
+      )}
       {message && <p class={`conn-message${message.error ? ' error' : ''}`} role="status">{message.text}</p>}
       <div class="conn-list">
         {groups.map((g) => (

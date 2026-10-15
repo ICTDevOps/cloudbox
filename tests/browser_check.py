@@ -121,12 +121,14 @@ with sync_playwright() as p:
     page.fill(f"{form} input >> nth=0", "Client démo PRD")
     check("identifiant proposé", page.input_value(f"{form} input >> nth=1") == WS_ID,
           page.input_value(f"{form} input >> nth=1"))
+    check("connexions isolées par défaut", page.locator(f"{form} input[name=create-identities][value=isolated]:checked").count() == 1)
     page.click(f"{form} .env-option.env-prd")
     page.click(f"{form} button[type=submit]")
     page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
     check("URL du workspace", page.url.endswith(f"#/w/{WS_ID}"), page.url)
     check("cadre PRD", page.locator(f"{A}.env-frame-prd").count() == 1)
-    check("mention « partagé entre workspaces »", page.locator(f"{A} .chip-warn").count() == 1)
+    check("puce « connexions isolées »", page.locator(f"{A} .chip-isolated").count() == 1)
+    check("Az PowerShell signalé comme commun", page.locator(f"{A} .chip .chip-shared").count() == 1)
     check("workspace dans la barre latérale, actif", page.locator(f".sidebar a.nav-item.active[href='#/w/{WS_ID}']").count() == 1)
     page.wait_for_timeout(8000)  # chargement des terminaux et de VS Code
     check("trois panneaux par défaut", tab_titles(page) == ["Bash 2", "PowerShell 1", "VS Code"], tab_titles(page))
@@ -278,6 +280,10 @@ with sync_playwright() as p:
     page.click(f"{D} .link-button")
     sform = "dialog[open] .ws-settings"
     page.wait_for_selector(sform)
+    check("paramètres : connexions isolées", page.locator(f"{sform} .identity-option.selected input[value=isolated]").count() == 1)
+    page.click(f"{sform} .identity-option >> nth=1")
+    check("paramètres : terminaux à rouvrir signalés", page.locator(f"{sform} .identities-field .warn").count() == 1)
+    page.click(f"{sform} .identity-option >> nth=0")
     page.fill(f"{sform} input[name=tenant]", "contoso.onmicrosoft.com")
     page.fill(f"{sform} input[name=clientId]", "pas-un-guid")
     page.click(f"{sform} button[type=submit]")

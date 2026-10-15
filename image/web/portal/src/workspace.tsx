@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type Workspace } from './api';
 import { AssistantPanel, assistantConfigStore, useAssistantConfig } from './assistant';
 import { ConnectionsDrawer } from './connections';
-import { ContextBar } from './context';
+import { ContextBar, refreshCloudContext } from './context';
 import { CONNECTIONS_EVENT, isConnectionsShortcut, mountDock, type DockHandle } from './dock';
 import { EnvBadge, TopBar } from './home';
 import { Icon } from './icons';
@@ -209,7 +209,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
             <code class="muted">{ws.folder}</code>
           </div>
         </div>
-        <ContextBar showShared />
+        <ContextBar wsId={ws.id} />
         <div class="ws-head-actions">
           <button type="button" class="button ws-settings-button" onClick={openSettings} title={m.workspace.settingsTitle}>
             <Icon name="gear" size={17} /> {m.common.settings}
@@ -257,6 +257,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
               settingsDialog.current?.close();
               setWs(saved);
               workspaceStore.reload();
+              refreshCloudContext(); // mode des connexions éventuellement changé
             }}
           />
         )}

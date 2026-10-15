@@ -9,6 +9,8 @@ import path from 'node:path';
 // Répertoire de l'utilisateur dev (CLOUDBOX_HOME : uniquement pour exécuter l'API hors du container, en test)
 export const HOME = process.env.CLOUDBOX_HOME ?? '/home/dev';
 export const STATE_DIR = path.join(HOME, '.cloudbox', 'workspaces');
+// Connexions isolées d'un workspace (az, azd, gh, contexte Kubernetes) : un dossier par workspace
+export const IDENTITY_ROOT = path.join(HOME, '.cloudbox', 'identities');
 export const DEFAULT_ROOT = path.join(HOME, 'workspaces');
 export const SOCKET = process.env.CLOUDBOX_API_SOCKET ?? '/run/cloudbox/api.sock';
 export const MAX_BODY = 512 * 1024;
@@ -49,6 +51,9 @@ export interface Workspace {
   initialPanels?: PanelKind[];
   // Fournisseur et modèle propres au workspace (sinon le modèle par défaut de l'assistant)
   assistant?: { provider: string; model: string };
+  // Connexions des terminaux du workspace : isolées (défaut, champ absent) ou partagées avec les
+  // autres workspaces
+  identities?: IdentityMode;
   layout: unknown;
   created: string;
   updated: string;
@@ -88,9 +93,10 @@ export function withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-export function run(cmd: string, args: string[], timeoutMs = 5000): Promise<string> {
+export function run(cmd: string, args: string[], timeoutMs = 5000, env?: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+    const options = { timeout: timeoutMs, maxBuffer: 1024 * 1024, ...(env ? { env: { ...process.env, ...env } } : {}) };
+    execFile(cmd, args, options, (err, stdout) => {
       if (err) reject(err);
       else resolve(stdout);
     });
@@ -371,6 +377,54 @@ export async function loadWorkspace(id: string): Promise<Workspace> {
   }
 }
 
+// --- Connexions par workspace ---
+//
+// En mode isolé, les terminaux du workspace reçoivent leurs propres dossiers de configuration
+// (cloudbox-term pose les mêmes variables, à garder identiques) :
+//   az CLI : AZURE_CONFIG_DIR (extensions communes : AZURE_EXTENSION_DIR)   azd : AZD_CONFIG_DIR
+//   gh : GH_CONFIG_DIR
+//   kubectl : KUBECONFIG=<workspace>/kube/config:~/.kube/config ; le premier fichier reçoit le
+//   contexte courant (use-context) et les clusters ajoutés par az aks get-credentials ; les clusters
+//   de ~/.kube/config restent visibles partout, avec leur namespace (attribut du contexte, partagé).
+// Az PowerShell n'a pas de dossier de contexte configurable : il reste partagé, et signalé comme tel.
+
+export const IDENTITY_MODES = ['isolated', 'shared'] as const;
+export type IdentityMode = (typeof IDENTITY_MODES)[number];
+export const CONTEXT_TOOLS = ['azureCli', 'azPowerShell', 'kubernetes', 'github'] as const;
+export type ContextTool = (typeof CONTEXT_TOOLS)[number];
+
+export function identityMode(ws: Pick<Workspace, 'identities'>): IdentityMode {
+  return ws.identities === 'shared' ? 'shared' : 'isolated';
+}
+
+export function checkIdentities(v: unknown): IdentityMode {
+  if (typeof v === 'string' && (IDENTITY_MODES as readonly string[]).includes(v)) return v as IdentityMode;
+  throw new HttpError(400, 'Connexions invalides (isolated ou shared)', 'Invalid sign-ins (isolated or shared)');
+}
+
+export function identityDir(id: string): string {
+  return path.join(IDENTITY_ROOT, checkId(id));
+}
+
+// Variables d'environnement des terminaux du workspace (aucune en mode partagé)
+export function identityEnv(ws: Pick<Workspace, 'id' | 'identities'>): Record<string, string> {
+  if (identityMode(ws) === 'shared') return {};
+  const dir = identityDir(ws.id);
+  return {
+    AZURE_CONFIG_DIR: path.join(dir, 'azure'),
+    // Extensions az : des outils, pas des identités, installées une fois pour tous les workspaces
+    AZURE_EXTENSION_DIR: path.join(HOME, '.azure', 'cliextensions'),
+    AZD_CONFIG_DIR: path.join(dir, 'azd'),
+    GH_CONFIG_DIR: path.join(dir, 'gh'),
+    KUBECONFIG: `${path.join(dir, 'kube', 'config')}:${path.join(HOME, '.kube', 'config')}`,
+  };
+}
+
+// Outils dont la connexion est commune à tous les workspaces
+export function sharedTools(ws: Pick<Workspace, 'identities'>): ContextTool[] {
+  return identityMode(ws) === 'shared' ? [...CONTEXT_TOOLS] : ['azPowerShell'];
+}
+
 // --- tmux ---
 
 export async function tmuxSessions(): Promise<string[]> {
@@ -398,6 +452,7 @@ export interface TerminalState {
   cwd: string; // dossier courant du panneau tmux (celui du processus au premier plan)
   command: string;
   idle: boolean; // le shell attend une commande (rien ne tourne au premier plan)
+  identities: IdentityMode; // connexions du terminal, fixées à son ouverture
 }
 
 // Dossier courant et commande en cours des terminaux d'un workspace (barre de chemin du portail).
@@ -415,9 +470,11 @@ export async function workspaceTerminals(id: string): Promise<TerminalState[]> {
     const [session, , , cwd, command = ''] = line.split('\t');
     if (!session || !re.test(session) || terminals.has(session)) continue;
     const shell = session.split('_')[1];
-    terminals.set(session, { session, cwd: cwd ?? '', command, idle: command === shell });
+    terminals.set(session, { session, cwd: cwd ?? '', command, idle: command === shell, identities: 'shared' });
   }
-  return [...terminals.values()];
+  const list = [...terminals.values()];
+  await Promise.all(list.map(async (t) => (t.identities = await sessionIdentity(t.session))));
+  return list;
 }
 
 export async function killSession(name: string): Promise<void> {
@@ -427,8 +484,9 @@ export async function killSession(name: string): Promise<void> {
 
 // --- Contexte réel ---
 
-export async function azureCliContext(): Promise<Record<string, string> | null> {
-  const dir = process.env.AZURE_CONFIG_DIR ?? path.join(HOME, '.azure');
+// env : variables d'un workspace isolé (identityEnv) ; sans elles, la configuration commune
+export async function azureCliContext(env: Record<string, string> = {}): Promise<Record<string, string> | null> {
+  const dir = env.AZURE_CONFIG_DIR ?? process.env.AZURE_CONFIG_DIR ?? path.join(HOME, '.azure');
   try {
     const profile = await readJson(path.join(dir, 'azureProfile.json'));
     if (!isRecord(profile) || !Array.isArray(profile.subscriptions)) return null;
@@ -471,8 +529,8 @@ export async function azPowerShellContext(): Promise<Record<string, string> | nu
 }
 
 // Compte GitHub CLI : lu dans hosts.yml (forme simple écrite par gh), sans appel réseau
-export async function githubContext(): Promise<Record<string, string> | null> {
-  const dir = process.env.GH_CONFIG_DIR ?? path.join(HOME, '.config', 'gh');
+export async function githubContext(env: Record<string, string> = {}): Promise<Record<string, string> | null> {
+  const dir = env.GH_CONFIG_DIR ?? process.env.GH_CONFIG_DIR ?? path.join(HOME, '.config', 'gh');
   try {
     const text = await readFile(path.join(dir, 'hosts.yml'), 'utf8');
     const host = /^([A-Za-z0-9.-]+):\s*$/m.exec(text)?.[1];
@@ -484,16 +542,47 @@ export async function githubContext(): Promise<Record<string, string> | null> {
   }
 }
 
-export async function kubernetesContext(): Promise<Record<string, string> | null> {
+export async function kubernetesContext(env: Record<string, string> = {}): Promise<Record<string, string> | null> {
+  const kubeEnv = env.KUBECONFIG ? { KUBECONFIG: env.KUBECONFIG } : undefined;
   try {
-    const context = (await run('kubectl', ['config', 'current-context'])).trim();
+    const context = (await run('kubectl', ['config', 'current-context'], 5000, kubeEnv)).trim();
     if (!context) return null;
     const namespace = (
-      await run('kubectl', ['config', 'view', '--minify', '-o', 'jsonpath={..namespace}']).catch(() => '')
+      await run('kubectl', ['config', 'view', '--minify', '-o', 'jsonpath={..namespace}'], 5000, kubeEnv).catch(() => '')
     ).trim();
     return { context, namespace: namespace || 'default' };
   } catch {
     return null;
+  }
+}
+
+// Contexte réel commun (accueil) ou d'un workspace : ce que ses terminaux utilisent réellement
+export async function cloudContext(ws?: Workspace) {
+  const env = ws ? identityEnv(ws) : {};
+  const [azureCli, azPowerShell, kubernetes, github] = await Promise.all([
+    azureCliContext(env),
+    azPowerShellContext(),
+    kubernetesContext(env),
+    githubContext(env),
+  ]);
+  const shared = ws ? sharedTools(ws) : [...CONTEXT_TOOLS];
+  return {
+    azureCli, azPowerShell, kubernetes, github,
+    identities: ws ? identityMode(ws) : ('shared' as IdentityMode),
+    shared,
+    sharedAcrossWorkspaces: shared.length === CONTEXT_TOOLS.length,
+  };
+}
+
+// Mode des connexions d'un terminal, fixé à son ouverture (variable de session tmux posée par
+// cloudbox-term) : un terminal ouvert avant l'isolation, ou avant un changement de mode, garde
+// l'ancien. Sans la variable : terminal d'avant l'isolation, donc partagé.
+export async function sessionIdentity(session: string): Promise<IdentityMode> {
+  try {
+    const out = (await run('tmux', ['show-environment', '-t', `=${session}`, 'CLOUDBOX_IDENTITIES'])).trim();
+    return out === 'CLOUDBOX_IDENTITIES=isolated' ? 'isolated' : 'shared';
+  } catch {
+    return 'shared';
   }
 }
 
