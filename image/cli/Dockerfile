@@ -130,7 +130,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- Node.js LTS ---
 # renovate: datasource=node-version depName=node versioning=node
-ARG NODE_VERSION=24.21.0
+ARG NODE_VERSION=24.22.0
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="node-v${NODE_VERSION}-linux-$(arch_name x64 arm64).tar.xz" \
