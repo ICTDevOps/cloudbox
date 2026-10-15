@@ -37,6 +37,11 @@ function prompt {
         $global:CloudboxPromptSeq = 1 + [int]$global:CloudboxPromptSeq
         tmux set-option -p -t $env:TMUX_PANE '@cloudbox_prompt' "$($global:CloudboxPromptSeq):$(if ($ok) { 0 } else { 1 })" 2>$null
     }
+    # Set-Location ne change pas le dossier du processus : on l'aligne, pour que tmux le voie
+    # (barre de chemin du portail, découpage d'un panneau tmux dans le même dossier)
+    if ($PWD.Provider.Name -eq 'FileSystem') {
+        try { [Environment]::CurrentDirectory = $PWD.ProviderPath } catch { }
+    }
     $e = [char]27
     $ws = ''
     if ($env:CLOUDBOX_WORKSPACE) {

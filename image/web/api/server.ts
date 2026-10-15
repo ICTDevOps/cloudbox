@@ -4,11 +4,15 @@
 //
 //   GET    /api/health
 //   GET    /api/context                               contexte réel : az CLI, Az PowerShell, Kubernetes, GitHub
+//   GET    /api/folders?path=…                       sous-dossiers d'un dossier de /home/dev (sélecteur, sans les cachés)
 //   GET    /api/preferences                           préférences du portail (thème, nouveau workspace)
-//   PUT    /api/preferences                           mise à jour partielle { theme?, newWorkspace?: { env?, panels? } }
+//   PUT    /api/preferences                           mise à jour partielle { theme?, newWorkspace?: { env?, panels? },
+//                                                     terminal?: { fontFamily?, fontSize?, lineHeight?, cursorStyle?,
+//                                                     cursorBlink?, theme?, pathBar? } }
 //   GET    /api/workspaces                            liste (sans les dispositions)
 //   POST   /api/workspaces                            création { id, name, env, folder?, panels? }
 //   GET    /api/workspaces/:id                        workspace complet + sessions tmux actives
+//   GET    /api/workspaces/:id/terminals              dossier courant et commande en cours de ses terminaux
 //   PUT    /api/workspaces/:id                        mise à jour partielle { name?, env?, layout?, settings?, assistant? }
 //   POST   /api/workspaces/:id/panels                 attribue un numéro de panneau terminal { n }
 //   DELETE /api/workspaces/:id                        suppression (le dossier de travail est conservé)
@@ -26,7 +30,7 @@ import path from 'node:path';
 import {
   HttpError, ID_RE, PREFERENCES_FILE, SOCKET, STATE_DIR, applyPreferences, azPowerShellContext, azureCliContext, checkEnv, checkId, checkInput, checkName,
   checkPanels, checkSettings, githubContext, isRecord, killSession, kubernetesContext, loadPreferences, loadWorkspace, readBody, resolveFolder, run, send,
-  sessionPattern, stateFile, summary, withLock, workspaceSessions, writeJsonAtomic, type Workspace,
+  listFolders, sessionPattern, stateFile, summary, withLock, workspaceSessions, workspaceTerminals, writeJsonAtomic, type Workspace,
 } from './lib.ts';
 import { checkWorkspaceAssistant } from './assistant/config.ts';
 import { abortWorkspace, handleAssistant } from './assistant/routes.ts';
@@ -54,6 +58,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   switch (route) {
     case 'GET /health':
       return send(res, 200, { ok: true });
+
+    case 'GET /folders': {
+      return send(res, 200, await listFolders(url.searchParams.get('path')));
+    }
 
     case 'GET /context': {
       const [azureCli, azPowerShell, kubernetes, github] = await Promise.all([
@@ -131,6 +139,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     case 'GET /workspaces/:': {
       const ws = await loadWorkspace(parts[2]);
       return send(res, 200, { ...ws, sessions: await workspaceSessions(ws.id) });
+    }
+
+    case 'GET /workspaces/:/terminals': {
+      const ws = await loadWorkspace(parts[2]);
+      return send(res, 200, { terminals: await workspaceTerminals(ws.id) });
     }
 
     case 'PUT /workspaces/:': {

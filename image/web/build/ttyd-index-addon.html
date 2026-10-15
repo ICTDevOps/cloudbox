@@ -95,3 +95,86 @@ document.addEventListener('contextmenu', function (event) {
   }, 50);
 })();
 </script>
+<script>
+// Cloudbox : apparence du terminal (police, taille, interligne, curseur, couleurs), réglée dans la
+// fenêtre Paramètres du portail. Lue dans le cache « cloudbox.terminal » (même origine : même
+// localStorage), puis dans /api/preferences ; un changement fait dans le portail arrive par
+// l'événement « storage » et s'applique sans recharger. ttyd réapplique ses propres options à la
+// connexion et recrée window.term à la reconnexion : on réapplique à chaque nouveau terminal.
+(function () {
+  var LIGHT = {
+    background: '#ffffff', foreground: '#24292f', cursor: '#24292f', cursorAccent: '#ffffff',
+    selectionBackground: '#b6d7ff', selectionForeground: '#24292f',
+    black: '#24292f', red: '#cf222e', green: '#116329', yellow: '#9a6700',
+    blue: '#0969da', magenta: '#8250df', cyan: '#1b7c83', white: '#6e7781',
+    brightBlack: '#57606a', brightRed: '#a40e26', brightGreen: '#1a7f37', brightYellow: '#633c01',
+    brightBlue: '#0550ae', brightMagenta: '#6639ba', brightCyan: '#136061', brightWhite: '#ffffff'
+  };
+  // Sombre : bleu nuit du portail
+  var DARK = {
+    background: '#0b1729', foreground: '#d6deeb', cursor: '#d6deeb', cursorAccent: '#0b1729',
+    selectionBackground: '#264f78', selectionForeground: '#ffffff',
+    black: '#1b2638', red: '#ff6b6b', green: '#7fd962', yellow: '#f5c451',
+    blue: '#5aa2ff', magenta: '#c792ea', cyan: '#4fd1d9', white: '#c5d1e0',
+    brightBlack: '#5d6f8a', brightRed: '#ff8a80', brightGreen: '#a3f07f', brightYellow: '#ffe083',
+    brightBlue: '#82b8ff', brightMagenta: '#e0a8ff', brightCyan: '#7ee8ef', brightWhite: '#ffffff'
+  };
+  var prefs = null;
+  var applied = null;
+  var media = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function read(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function cached() {
+    try { return JSON.parse(read('cloudbox.terminal') || 'null'); } catch (e) { return null; }
+  }
+  // Couleurs : choix du terminal, sinon thème du portail, sinon système
+  function isDark() {
+    var choice = prefs && prefs.theme !== 'auto' ? prefs.theme : read('cloudbox.theme');
+    if (choice === 'light' || choice === 'dark') return choice === 'dark';
+    return media.matches;
+  }
+  function apply(term) {
+    if (!term || !term.options) return;
+    if (!prefs) return;
+    var o = term.options;
+    var theme = isDark() ? DARK : LIGHT;
+    o.fontFamily = prefs.fontFamily || 'Consolas, "Liberation Mono", Menlo, Courier, monospace';
+    o.fontSize = prefs.fontSize;
+    o.lineHeight = prefs.lineHeight;
+    o.cursorStyle = prefs.cursorStyle;
+    o.cursorBlink = prefs.cursorBlink;
+    o.theme = theme;
+    document.documentElement.style.background = theme.background || '';
+    document.body.style.background = theme.background || '';
+    applied = term;
+    // ttyd recalcule la taille du terminal (lignes, colonnes) sur l'événement resize de la fenêtre
+    window.dispatchEvent(new Event('resize'));
+  }
+  function update(next) {
+    if (!next || typeof next !== 'object') return;
+    prefs = next;
+    apply(window.term);
+  }
+
+  update(cached());
+  fetch('/api/preferences', { cache: 'no-store', credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (p) { if (p) update(p.terminal); })
+    .catch(function () { /* valeurs du cache ou de ttyd */ });
+
+  window.addEventListener('storage', function (event) {
+    if (event.key === 'cloudbox.terminal') update(cached());
+    else if (event.key === 'cloudbox.theme') apply(window.term);
+  });
+  media.addEventListener('change', function () { apply(window.term); });
+
+  // Nouveau terminal (chargement, reconnexion) ou options remises par ttyd à la connexion
+  setInterval(function () {
+    var term = window.term;
+    if (!term || !term.options || !prefs) return;
+    if (term !== applied || term.options.fontSize !== prefs.fontSize) apply(term);
+  }, 500);
+})();
+</script>

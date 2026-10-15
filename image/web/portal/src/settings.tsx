@@ -6,6 +6,7 @@ import { api, ENV_LABELS, ENVS, type Env, type ModelChoice, type Workspace, type
 import { ModelPicker } from './ai-settings';
 import { useAssistantConfig } from './assistant';
 import { t } from './i18n';
+import { Icon } from './icons';
 
 type Field = { key: keyof WorkspaceSettings; label: string; placeholder: string; help: string };
 
@@ -20,10 +21,9 @@ function fields(): Field[] {
   ];
 }
 
-export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
+export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
   ws: Workspace;
   onSaved: (ws: Workspace) => void;
-  onDeleted: () => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(ws.name);
@@ -56,22 +56,15 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
     }
   };
 
-  const remove = async () => {
-    const ok = window.confirm(m.settings.confirmDelete(ws.name, ws.folder));
-    if (!ok) return;
-    setBusy(true);
-    try {
-      await api.deleteWorkspace(ws.id);
-      onDeleted();
-    } catch (err) {
-      setError((err as Error).message);
-      setBusy(false);
-    }
-  };
-
   return (
     <form class="card create-ws ws-settings" onSubmit={submit}>
-      <h2>{m.settings.title}</h2>
+      <div class="dialog-head">
+        <span class="icon-tile large"><Icon name="gear" size={28} /></span>
+        <div>
+          <h2>{m.settings.title}</h2>
+          <p>{ws.name}</p>
+        </div>
+      </div>
       <label>
         {m.common.name}
         <input value={name} onInput={(e) => setName(e.currentTarget.value)} required maxLength={64} />
@@ -81,6 +74,7 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
         {ENVS.map((value) => (
           <label class={`env-option env-${value}${env === value ? ' selected' : ''}`} key={value}>
             <input type="radio" name="settings-env" value={value} checked={env === value} onChange={() => setEnv(value)} />
+            <Icon name="cube" size={18} />
             {ENV_LABELS[value]}
           </label>
         ))}
@@ -109,13 +103,6 @@ export function WorkspaceSettingsForm({ ws, onSaved, onDeleted, onCancel }: {
       <div class="ws-actions">
         <button type="submit" class="button primary" disabled={busy}>{m.common.save}</button>
         <button type="button" class="button ghost" onClick={onCancel}>{m.common.cancel}</button>
-      </div>
-      <div class="danger-zone">
-        <div>
-          <strong>{m.settings.deleteTitle}</strong>
-          <p class="field-help">{m.settings.deleteHelp}</p>
-        </div>
-        <button type="button" class="button danger" onClick={remove} disabled={busy}>{m.common.delete}</button>
       </div>
     </form>
   );

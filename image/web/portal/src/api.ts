@@ -27,9 +27,38 @@ export const PANEL_KINDS: readonly PanelKind[] = ['pwsh', 'bash', 'code', 'assis
 export type Theme = 'auto' | 'light' | 'dark';
 
 // Préférences du portail, communes à tous les workspaces (/home/dev/.cloudbox/preferences.json)
+export type CursorStyle = 'block' | 'bar' | 'underline';
+
+// Apparence des terminaux web (appliquée par la page ttyd) et barre de chemin
+export interface TerminalPrefs {
+  fontFamily: string; // vide : police par défaut
+  fontSize: number;
+  lineHeight: number;
+  cursorStyle: CursorStyle;
+  cursorBlink: boolean;
+  theme: Theme; // auto : comme le portail
+  pathBar: boolean;
+}
+
 export interface Preferences {
   theme: Theme;
   newWorkspace: { env: Env; panels: PanelKind[] };
+  terminal: TerminalPrefs;
+}
+
+// Sous-dossiers d'un dossier de /home/dev (sélecteur du formulaire de création)
+export interface FolderList {
+  path: string;
+  parent: string | null;
+  folders: string[];
+}
+
+// Dossier courant et commande en cours d'un terminal du workspace (barre de chemin)
+export interface TerminalState {
+  session: string;
+  cwd: string;
+  command: string;
+  idle: boolean;
 }
 
 export interface ModelChoice {
@@ -246,8 +275,10 @@ export const api = {
   context: () => request<CloudContext>('GET', '/api/context'),
   listWorkspaces: () => request<WorkspaceSummary[]>('GET', '/api/workspaces'),
   getWorkspace: (id: string) => request<Workspace>('GET', `/api/workspaces/${id}`),
+  terminals: async (id: string) => (await request<{ terminals: TerminalState[] }>('GET', `/api/workspaces/${id}/terminals`)).terminals,
   preferences: () => request<Preferences>('GET', '/api/preferences'),
-  updatePreferences: (data: { theme?: Theme; newWorkspace?: Partial<Preferences['newWorkspace']> }) =>
+  folders: (path: string) => request<FolderList>('GET', `/api/folders?path=${encodeURIComponent(path)}`),
+  updatePreferences: (data: { theme?: Theme; newWorkspace?: Partial<Preferences['newWorkspace']>; terminal?: Partial<TerminalPrefs> }) =>
     request<Preferences>('PUT', '/api/preferences', data),
   createWorkspace: (data: { id: string; name: string; env: Env; folder?: string; panels?: PanelKind[] }) =>
     request<Workspace>('POST', '/api/workspaces', data),

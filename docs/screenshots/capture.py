@@ -28,14 +28,24 @@ def run(page, frame, command, wait=1500):
 with sync_playwright() as p:
     browser = p.chromium.launch()
 
-    # Accueil
-    ctx = browser.new_context(viewport=VIEW, locale="en-US")
+    # Accueil (thème sombre, celui des maquettes ; le thème clair a sa propre capture)
+    ctx = browser.new_context(viewport=VIEW, locale="en-US", color_scheme="dark")
     page = ctx.new_page()
     sign_in(page)
     page.wait_for_timeout(1000)
     page.screenshot(path=f"{OUT}/home.png")
 
-    # Workspace de production : terminaux et VS Code
+    # Fenêtre de création d'un workspace, sélecteur de dossier ouvert
+    page.click(".sidebar .nav-new")
+    page.wait_for_selector("dialog[open] .create-ws")
+    page.fill("dialog[open] .create-ws input >> nth=0", "Northwind — development")
+    page.click("dialog[open] .folder-browse")
+    page.wait_for_selector("dialog[open] .folder-list button")
+    page.wait_for_timeout(500)
+    page.screenshot(path=f"{OUT}/new-workspace.png")
+    page.click("dialog[open] .dialog-close")
+
+    # Workspace de production : terminaux, VS Code et assistant
     page.click(".sidebar a.nav-item[href='#/w/contoso-prd']")
     page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
     code = page.frame_locator(f"{A} iframe[src^='/code/']")
@@ -51,8 +61,14 @@ with sync_playwright() as p:
         page.wait_for_timeout(2500)
     except Exception as err:  # noqa: BLE001
         print("VS Code : fichier non ouvert", err)
+    page.click(f"{A} .add-panel.kind-assistant")
+    page.wait_for_selector(f"{A} .assistant-card.context", timeout=10000)
+    page.wait_for_timeout(1500)
     page.mouse.move(0, 0)
     page.screenshot(path=f"{OUT}/workspace.png")
+    # L'assistant refermé pour les captures suivantes
+    page.locator(f"{A} .dv-tab", has_text="Assistant").locator(".cb-tab-close").click()
+    page.wait_for_timeout(800)
 
     # Panneau Connexions : commande saisie dans le terminal Bash, sans être exécutée
     page.locator(bash).click()
@@ -64,25 +80,29 @@ with sync_playwright() as p:
     page.screenshot(path=f"{OUT}/connections.png")
 
     # Paramètres du workspace
-    page.click(f"{A} .ws-toolbar button:has-text('Settings')")
+    page.click(f"{A} .ws-settings-button")
     page.wait_for_selector("dialog[open] .ws-settings")
     page.wait_for_timeout(500)
     page.screenshot(path=f"{OUT}/settings.png")
     page.click("dialog[open] .dialog-close")
 
-    # Fenêtre Settings de la barre latérale, onglet Assistant IA
+    # Fenêtre Settings de la barre latérale, onglet Terminal puis onglet Assistant IA
     page.click(".sidebar-foot button.nav-item")
     page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.wait_for_selector("dialog[open] .terminal-prefs")
+    page.wait_for_timeout(500)
+    page.screenshot(path=f"{OUT}/terminal-settings.png")
+    page.click("dialog[open] .prefs-tabs button >> nth=3")
     page.wait_for_selector("dialog[open] .ai-provider")
     page.wait_for_timeout(500)
     page.screenshot(path=f"{OUT}/preferences.png")
     ctx.close()
 
-    # Accueil en thème sombre
-    ctx = browser.new_context(viewport=VIEW, locale="en-US", color_scheme="dark")
+    # Accueil en thème clair
+    ctx = browser.new_context(viewport=VIEW, locale="en-US", color_scheme="light")
     page = ctx.new_page()
     sign_in(page)
     page.wait_for_timeout(1000)
-    page.screenshot(path=f"{OUT}/home-dark.png")
+    page.screenshot(path=f"{OUT}/home-light.png")
     ctx.close()
     browser.close()

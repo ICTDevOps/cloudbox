@@ -86,7 +86,7 @@ with sync_playwright() as p:
     # --- Fenêtre Paramètres : thème, panneaux d'un nouveau workspace, assistant ---
     page.click(".sidebar-foot button.nav-item")
     page.wait_for_selector("dialog[open] .prefs")
-    check("onglets des paramètres", page.locator("dialog[open] .prefs-tabs button").count() == 3)
+    check("onglets des paramètres", page.locator("dialog[open] .prefs-tabs button").count() == 4)
     page.click("dialog[open] .seg-choice label:has(input[name=prefs-theme]) >> nth=2")
     page.locator("html[data-theme=dark]").wait_for(state="attached", timeout=5000)
     check("thème sombre forcé", True)
@@ -97,7 +97,7 @@ with sync_playwright() as p:
     check("panneaux par défaut cochés", checked == 3, str(checked))
     check("assistant désactivé : case grisée",
           page.locator("dialog[open] .panel-option.disabled input[name=prefs-panels]").count() == 1)
-    page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.click("dialog[open] .prefs-tabs button >> nth=3")
     page.wait_for_selector("dialog[open] .ai-enable")
     check("onglet Assistant IA : fournisseurs masqués tant qu'il est désactivé",
           page.locator("dialog[open] .ai-provider").count() == 0)
@@ -110,6 +110,14 @@ with sync_playwright() as p:
     form = "dialog[open] .create-ws"
     page.wait_for_selector(form)
     check("panneaux proposés à la création", page.locator(f"{form} input[name=create-panels]:checked").count() == 3)
+    page.click(f"{form} .folder-browse")
+    try:
+        page.locator(f"{form} .folder-current", has_text="~").wait_for(timeout=5000)
+        check("sélecteur de dossier : départ sous /home/dev", True)
+    except Exception:  # noqa: BLE001
+        check("sélecteur de dossier : départ sous /home/dev", False, page.locator(f"{form} .folder-picker").inner_text())
+    page.click(f"{form} .folder-browse")  # refermé
+    check("sélecteur de dossier refermé", page.locator(f"{form} .folder-picker").count() == 0)
     page.fill(f"{form} input >> nth=0", "Client démo PRD")
     check("identifiant proposé", page.input_value(f"{form} input >> nth=1") == WS_ID,
           page.input_value(f"{form} input >> nth=1"))
@@ -127,6 +135,8 @@ with sync_playwright() as p:
     srcs = sorted(frames.evaluate_all("els => els.map(e => e.getAttribute('src'))"))
     check("iframes", srcs == [f"/code/?folder=%2Fhome%2Fdev%2Fworkspaces%2F{WS_ID}",
                               f"/term/bash/?arg={WS_ID}~2", f"/term/pwsh/?arg={WS_ID}~1"], srcs)
+    check("onglets : « + » dans les groupes de terminaux", page.locator(f"{A} .cb-group-actions.left button:not([hidden])").count() == 2)
+    check("onglets : ouvrir dans un onglet et agrandir", page.locator(f"{A} .cb-group-actions.right button:not([hidden])").count() == 6)
     code = page.frame_locator(f"{A} iframe[src^='/code/']")
     try:
         code.locator(".monaco-workbench").wait_for(timeout=30000)
@@ -134,6 +144,53 @@ with sync_playwright() as p:
     except Exception as err:  # noqa: BLE001
         check("VS Code chargé dans son panneau", False, str(err)[:200])
     page.screenshot(path=f"{OUT}/2-workspace.png")
+
+    # --- Barre de chemin : dossier courant lu par tmux, clic = « cd » saisi sans Entrée ---
+    bash_bar = page.locator(f"{A} .panel-frame:has(iframe[src^='/term/bash/?arg={WS_ID}~2']) .path-bar")
+    try:
+        bash_bar.locator("button.last").wait_for(timeout=10000)
+        crumbs = bash_bar.locator(".path-crumbs button").all_inner_texts()
+        check("barre de chemin : dossier du workspace", crumbs == ["~", "workspaces", WS_ID], crumbs)
+    except Exception as err:  # noqa: BLE001
+        check("barre de chemin affichée", False, str(err)[:200])
+    check("pas de barre de chemin pour VS Code", page.locator(f"{A} .panel-frame:has(iframe[src^='/code/']) .path-bar").count() == 0)
+    bash_bar.locator(".path-crumbs button", has_text="workspaces").click()
+    page.wait_for_timeout(1000)
+    last = [l for l in (terminal_text(page, f"{A} iframe[src^='/term/bash/?arg={WS_ID}~2']") or "").split("\n") if l.strip()][-2:-1]
+    check("clic sur un segment : cd saisi, non exécuté", bool(last) and last[0].rstrip().endswith("cd '/home/dev/workspaces'"), last)
+    check("focus rendu au terminal après le clic", page.evaluate("document.activeElement?.getAttribute('src') || ''").startswith("/term/bash/"))
+    page.keyboard.press("Control+U")
+
+    # --- Onglet Terminal des paramètres : appliqué à chaud aux terminaux ouverts ---
+    term_font = "() => window.term ? [window.term.options.fontSize, window.term.options.theme?.background ?? null] : null"
+    pwsh_body = page.frame_locator(f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']").locator("body")
+    before_font = pwsh_body.evaluate(term_font)
+    page.click(".sidebar-foot button.nav-item")
+    page.wait_for_selector("dialog[open] .prefs")
+    page.click("dialog[open] .prefs-tabs button >> nth=2")
+    page.wait_for_selector("dialog[open] .terminal-prefs")
+    page.click("dialog[open] .stepper button >> nth=1")
+    page.click("dialog[open] .stepper button >> nth=1")
+    page.click("dialog[open] .seg-choice label:has(input[name=prefs-term-theme]) >> nth=1")  # couleurs claires
+    page.screenshot(path=f"{OUT}/1c-terminal.png")
+    page.click("dialog[open] .terminal-prefs .button.primary")
+    page.wait_for_selector("dialog[open] .terminal-prefs [role=status]")
+    page.click("dialog[open] .dialog-close")
+    page.wait_for_timeout(1500)
+    after_font = pwsh_body.evaluate(term_font)
+    check("taille et couleurs appliquées sans rechargement", after_font == [before_font[0] + 2, "#ffffff"], f"{before_font} → {after_font}")
+    page.screenshot(path=f"{OUT}/2b-terminal-clair.png")
+    page.reload()
+    page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
+    page.wait_for_timeout(4000)
+    check("apparence conservée après rechargement", pwsh_body.evaluate(term_font) == after_font, pwsh_body.evaluate(term_font))
+    # Retour à la taille et aux couleurs d'origine : le menu tmux du clic droit (plus bas) doit tenir
+    # dans le panneau Bash
+    page.evaluate("size => fetch('/api/preferences', {method: 'PUT', headers: {'Content-Type': 'application/json'},"
+                  " body: JSON.stringify({terminal: {theme: 'auto', fontSize: size}})})", before_font[0])
+    page.reload()
+    page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
+    page.wait_for_timeout(4000)
 
     # --- Glisser le séparateur vertical au-dessus des iframes ---
     sash = page.locator(f"{A} .dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash").first
@@ -151,7 +208,7 @@ with sync_playwright() as p:
     check("glisser le séparateur au-dessus d'une iframe", before - after > 150, f"{before} → {after}")
 
     # --- Ajout d'un panneau, puis rechargement : disposition et sessions retrouvées ---
-    page.locator(f"{A} .ws-toolbar button", has_text="+ PowerShell").click()
+    page.locator(f"{A} .ws-toolbar .add-panel.kind-pwsh").click()
     page.wait_for_timeout(6000)
     check("panneau ajouté", "PowerShell 3" in tab_titles(page), tab_titles(page))
     page.wait_for_timeout(1500)  # sauvegarde différée
@@ -173,8 +230,8 @@ with sync_playwright() as p:
     page2.wait_for_selector(f"{A} .dv-tab", timeout=20000)
     page2.wait_for_timeout(3000)
     before_two = set(sessions(page))
-    page.locator(f"{A} .ws-toolbar button", has_text="+ PowerShell").click()
-    page2.locator(f"{A} .ws-toolbar button", has_text="+ PowerShell").click()
+    page.locator(f"{A} .ws-toolbar .add-panel.kind-pwsh").click()
+    page2.locator(f"{A} .ws-toolbar .add-panel.kind-pwsh").click()
     page.wait_for_timeout(6000)
     new_sessions = sorted(set(sessions(page)) - before_two)
     check("deux onglets : deux nouvelles sessions distinctes", len(new_sessions) == 2, new_sessions)
@@ -303,6 +360,9 @@ with sync_playwright() as p:
     page.keyboard.press("Control+U")
 
     # --- Clic droit : le menu de tmux reste ouvert quand la souris bouge ---
+    # Fenêtre plus haute : le menu de tmux ne s'affiche que s'il tient dans le panneau
+    page.set_viewport_size({"width": 1400, "height": 1100})
+    page.wait_for_timeout(1000)
     screen = term.locator(".xterm-screen").bounding_box()
     mx, my = screen["x"] + screen["width"] / 3, screen["y"] + screen["height"] / 3
     page.mouse.move(mx, my)
@@ -317,6 +377,7 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
     check("Échap ferme le menu tmux", "Horizontal Split" not in (terminal_text(page, bash_frame) or ""))
+    page.set_viewport_size({"width": 1400, "height": 900})
 
     # --- Navigation entre workspaces par la barre latérale, sans rechargement ---
     pwsh_frame = f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']"
@@ -347,12 +408,19 @@ with sync_playwright() as p:
     page.screenshot(path=f"{OUT}/6-barre-repliee.png")
     page.click(".sidebar-toggle")
 
-    # --- Suppression d'un workspace depuis ses paramètres ---
+    # --- Suppression d'un workspace : bouton de la barre, confirmation ---
+    check("plus de suppression dans les paramètres du workspace", page.locator(".settings-dialog .danger-zone").count() == 0)
     page.click(".sidebar a.nav-item[href='#/w/projet-b']")
     page.wait_for_selector(f"{A}.env-frame-dev .dv-tab", timeout=20000)
-    page.click(f"{A} .ws-toolbar button:has-text('Paramètres')")
-    page.wait_for_selector("dialog[open] .ws-settings")
-    page.click("dialog[open] .danger-zone button")
+    page.click(f"{A} .ws-delete")
+    page.wait_for_selector("dialog[open] .delete-ws")
+    check("confirmation : dossier conservé", "/home/dev/workspaces/projet-b" in page.locator("dialog[open] .delete-ws").inner_text())
+    page.click("dialog[open] .delete-ws .button.ghost")  # Annuler
+    page.wait_for_timeout(500)
+    check("annulation : workspace conservé", page.locator(".sidebar a.nav-item[href='#/w/projet-b']").count() == 1)
+    page.click(f"{A} .ws-delete")
+    page.wait_for_selector("dialog[open] .delete-ws")
+    page.click("dialog[open] .delete-ws button[type=submit]")
     page.wait_for_timeout(1500)
     check("workspace supprimé : retour à l'accueil", page.url.endswith("#/") and page.locator(".home .tool-tiles").count() == 1, page.url)
     check("workspace retiré de la barre", page.locator(".sidebar a.nav-item[href='#/w/projet-b']").count() == 0)
@@ -373,7 +441,7 @@ with sync_playwright() as p:
     check("API en anglais", err.get("error", "").startswith("Workspace not found"), err)
     page.click(f".sidebar a.nav-item[href='#/w/{WS_ID}']")
     page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
-    check("workspace en anglais", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Connections")
+    check("workspace en anglais", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Cheat sheet")
     page.screenshot(path=f"{OUT}/8-english.png")
     anon = browser.new_context(locale="fr-FR")
     login = anon.new_page()
@@ -383,7 +451,7 @@ with sync_playwright() as p:
     anon.close()
     page.click(".sidebar .lang-switch button[lang=fr]")
     page.wait_for_timeout(300)
-    check("retour au français", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Connexions")
+    check("retour au français", page.locator(f"{A} .conn-toggle").inner_text().strip() == "Aide-mémoire")
 
     # --- Console : aucune violation de CSP ni erreur JavaScript du portail ---
     # vsda.js : module propriétaire de VS Code absent de code-server (404 en text/plain, bloqué par

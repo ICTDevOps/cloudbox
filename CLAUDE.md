@@ -160,10 +160,23 @@ Un **workspace** (un client, un projet, un environnement) regroupe des panneaux 
 Bash et VS Code dans une disposition redimensionnable, sauvegardée dans le volume
 (`/home/dev/.cloudbox/workspaces/<id>.json`). Chaque panneau terminal a sa session tmux
 (`<workspace>-<shell>[-n]`), VS Code s'ouvre sur le dossier du workspace.
+Charte : thème sombre bleu nuit (maquettes de l'utilisateur) et thème clair dérivé, couleurs en
+variables CSS (`styles.css`), icônes SVG intégrées (`icons.tsx`, évocations simplifiées des marques,
+jamais les logos officiels ni de ressource externe), illustration de l'accueil en SVG (`hero.tsx`).
+VS Code suit le thème du système (`window.autoDetectColorScheme`, réglage « machine »).
+Le formulaire de création propose un sélecteur de dossier (`GET /api/folders?path=`, dossiers non
+cachés de `/home/dev`, liens résolus, jamais au-dessus). Les onglets Dockview ont « + » (terminal du
+même type dans le groupe), « ouvrir dans un onglet du navigateur » et « agrandir ».
 La fenêtre « ⚙ Paramètres » de la barre latérale (onglets Général, Workspaces, Assistant IA)
 enregistre les préférences du portail dans `/home/dev/.cloudbox/preferences.json` (`GET/PUT
 /api/preferences`) : thème (auto / clair / sombre, mis en cache dans `localStorage` pour le premier
-rendu), environnement et panneaux proposés à la création. Les panneaux choisis à la création
+rendu), environnement et panneaux proposés à la création, apparence des terminaux (onglet Terminal :
+police du poste, taille, interligne, curseur, couleurs, barre de chemin). L'apparence est appliquée
+par la page ttyd (`image/web/build/ttyd-index-addon.html`) à `window.term`, depuis le cache
+`localStorage` `cloudbox.terminal` puis `/api/preferences`, et suivie à chaud (événement `storage`).
+La barre de chemin (`portal/src/pathbar.ts`) lit `GET /api/workspaces/:id/terminals`
+(`#{pane_current_path}` de tmux ; le prompt PowerShell aligne le dossier du processus sur
+`Set-Location`). Un clic sur un segment saisit `cd '…'` sans Entrée, comme l'aide-mémoire (panneau des commandes de connexion). Les panneaux choisis à la création
 (`initialPanels`) donnent la disposition de la première ouverture.
 L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le contexte affiché
 (abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,
