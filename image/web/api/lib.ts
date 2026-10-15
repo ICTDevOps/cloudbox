@@ -381,7 +381,8 @@ export async function loadWorkspace(id: string): Promise<Workspace> {
 //
 // En mode isolé, les terminaux du workspace reçoivent leurs propres dossiers de configuration
 // (cloudbox-term pose les mêmes variables, à garder identiques) :
-//   az CLI : AZURE_CONFIG_DIR   azd : AZD_CONFIG_DIR   gh : GH_CONFIG_DIR
+//   az CLI : AZURE_CONFIG_DIR (extensions communes : AZURE_EXTENSION_DIR)   azd : AZD_CONFIG_DIR
+//   gh : GH_CONFIG_DIR
 //   kubectl : KUBECONFIG=<workspace>/kube/config:~/.kube/config ; le premier fichier reçoit le
 //   contexte courant (use-context) et les clusters ajoutés par az aks get-credentials ; les clusters
 //   de ~/.kube/config restent visibles partout, avec leur namespace (attribut du contexte, partagé).
@@ -411,6 +412,8 @@ export function identityEnv(ws: Pick<Workspace, 'id' | 'identities'>): Record<st
   const dir = identityDir(ws.id);
   return {
     AZURE_CONFIG_DIR: path.join(dir, 'azure'),
+    // Extensions az : des outils, pas des identités, installées une fois pour tous les workspaces
+    AZURE_EXTENSION_DIR: path.join(HOME, '.azure', 'cliextensions'),
     AZD_CONFIG_DIR: path.join(dir, 'azd'),
     GH_CONFIG_DIR: path.join(dir, 'gh'),
     KUBECONFIG: `${path.join(dir, 'kube', 'config')}:${path.join(HOME, '.kube', 'config')}`,

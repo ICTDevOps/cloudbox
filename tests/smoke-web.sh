@@ -196,8 +196,8 @@ expect "GET terminaux d'un workspace inconnu" 404 "$(api "$BASE/api/workspaces/i
 # Connexions par workspace : isolées par défaut (az, azd, gh, contexte kubectl), partagées sur demande
 IDS=/home/dev/.cloudbox/identities
 ctxq() { docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/$1/context" | docker exec -i "$NAME" jq -r "$2"; }
-out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" '"ids=" + $env:CLOUDBOX_IDENTITIES + " az=" + $env:AZURE_CONFIG_DIR + " azd=" + $env:AZD_CONFIG_DIR + " gh=" + $env:GH_CONFIG_DIR + " kube=" + $env:KUBECONFIG')
-grep -q "ids=isolated az=$IDS/client/azure azd=$IDS/client/azd gh=$IDS/client/gh kube=$IDS/client/kube/config:/home/dev/.kube/config" <<<"$out" \
+out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" '"ids=" + $env:CLOUDBOX_IDENTITIES + " az=" + $env:AZURE_CONFIG_DIR + " ext=" + $env:AZURE_EXTENSION_DIR + " azd=" + $env:AZD_CONFIG_DIR + " gh=" + $env:GH_CONFIG_DIR + " kube=" + $env:KUBECONFIG')
+grep -q "ids=isolated az=$IDS/client/azure ext=/home/dev/.azure/cliextensions azd=$IDS/client/azd gh=$IDS/client/gh kube=$IDS/client/kube/config:/home/dev/.kube/config" <<<"$out" \
     && pass "terminal isolé : dossiers de connexion du workspace" || fail "terminal isolé : $(tail -c 400 <<<"$out")"
 expect "dossier des connexions en 0700" 700 "$(docker exec "$NAME" stat -c %a "$IDS/client")"
 # kubeconfig neuf du workspace (sans contexte courant) : le prompt Cloudbox reste affiché
@@ -298,6 +298,10 @@ expect "validation refusée si la ligne n'est pas vide" 409 "$(api -X POST "${JS
 # PSReadLine (mode Windows) : Échap efface la ligne ; Ctrl+U y insère un caractère littéral
 docker exec "$NAME" tmux send-keys -t '=ia_pwsh_1:' Escape
 sleep 1
+# Terminal ouvert avec d'autres connexions que celles du workspace : exécution refusée
+api -X PUT "${JSON[@]}" -d '{"identities":"shared"}' "$BASE/api/workspaces/ia" >/dev/null
+expect "validation refusée : terminal d'un autre mode de connexions" "connexions" "$(docker exec "$NAME" curl -s -X POST "${AUTH[@]}" "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo x"}' "$P/approve" | docker exec -i "$NAME" jq -r '.error' | grep -o connexions)"
+api -X PUT "${JSON[@]}" -d '{"identities":"isolated"}' "$BASE/api/workspaces/ia" >/dev/null
 sse=$(docker exec "$NAME" curl -sN --max-time 60 "${AUTH[@]}" "${JSON[@]}" -d '{"session":"ia_pwsh_1","command":"echo cloudbox-fake-ok"}' "$P/approve")
 if grep -q '^event: executed' <<<"$sse" && grep -q 'Résultat : ' <<<"$sse"; then
     pass "commande validée : exécutée, sortie relue"

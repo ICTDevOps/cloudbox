@@ -304,13 +304,19 @@ its own folders in `~/.cloudbox/identities/<id>/`, given to its terminals throug
 | Azure CLI | `AZURE_CONFIG_DIR` | yes |
 | Azure Developer CLI | `AZD_CONFIG_DIR` | yes |
 | GitHub CLI | `GH_CONFIG_DIR` | yes |
-| kubectl, k9s, helm… | `KUBECONFIG=<workspace file>:~/.kube/config` | current context; clusters added with `az aks get-credentials` stay in the workspace, those of `~/.kube/config` are visible everywhere (with their namespace, which belongs to the context and is shared) |
+| kubectl, k9s, helm (cluster access) | `KUBECONFIG=<workspace file>:~/.kube/config` | current context; clusters added with `az aks get-credentials` stay in the workspace, those of `~/.kube/config` are visible everywhere (with their namespace, which belongs to the context and is shared) |
+| Helm registries and repositories, kubelogin token cache, Docker credentials | their usual files in `/home/dev` | **no** |
 | Az PowerShell | none available | **no**: `Connect-AzAccount` is common to all workspaces, flagged in the toolbar |
 | CLI for Microsoft 365 | none available | **no** |
 | Graph, Exchange Online, Teams, PnP | in the PowerShell process | per terminal |
 
 - The toolbar shows **🔒 isolated sign-ins**, and the context it displays is the one of the
   workspace's terminals.
+- **The VS Code terminal is not isolated**: code-server is a single instance for all workspaces,
+  so its terminal uses the common sign-ins, like `docker exec`. Use the workspace's PowerShell and
+  Bash panels for anything tied to a tenant.
+- az extensions stay common to all workspaces (`AZURE_EXTENSION_DIR`); `az config` defaults
+  belong to the workspace.
 - A workspace can be switched to **shared** sign-ins (workspace ⚙, or when creating it): its
   terminals then use the common configuration, like VS Code's terminal and `docker exec`.
 - The mode is set when a terminal opens. A terminal opened before a mode change (or before this

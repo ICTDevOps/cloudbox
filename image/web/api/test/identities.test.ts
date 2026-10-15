@@ -34,6 +34,7 @@ test('variables : dossiers du workspace, kubeconfig en couches ; aucune en mode 
   const env = identityEnv({ id: 'client-a' });
   const dir = path.join(home, '.cloudbox', 'identities', 'client-a');
   assert.equal(env.AZURE_CONFIG_DIR, path.join(dir, 'azure'));
+  assert.equal(env.AZURE_EXTENSION_DIR, path.join(home, '.azure', 'cliextensions'));
   assert.equal(env.AZD_CONFIG_DIR, path.join(dir, 'azd'));
   assert.equal(env.GH_CONFIG_DIR, path.join(dir, 'gh'));
   assert.equal(env.KUBECONFIG, `${path.join(dir, 'kube', 'config')}:${path.join(home, '.kube', 'config')}`);

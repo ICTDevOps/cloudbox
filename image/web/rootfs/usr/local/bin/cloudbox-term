@@ -52,7 +52,9 @@ if [[ $identities == isolated ]]; then
     (umask 077 && mkdir -p "$ids/azure" "$ids/azd" "$ids/gh" "$ids/kube")
     # kubeconfig du workspace : contexte courant et clusters ajoutés ici ; ~/.kube/config reste lu
     [[ -s $ids/kube/config ]] || (umask 077 && printf 'apiVersion: v1\nkind: Config\n' > "$ids/kube/config")
-    envs+=(-e "AZURE_CONFIG_DIR=$ids/azure" -e "AZD_CONFIG_DIR=$ids/azd" -e "GH_CONFIG_DIR=$ids/gh"
+    # Extensions az (outils, pas identités) : communes à tous les workspaces
+    envs+=(-e "AZURE_CONFIG_DIR=$ids/azure" -e "AZURE_EXTENSION_DIR=$home/.azure/cliextensions"
+           -e "AZD_CONFIG_DIR=$ids/azd" -e "GH_CONFIG_DIR=$ids/gh"
            -e "KUBECONFIG=$ids/kube/config:$home/.kube/config")
 fi
 
