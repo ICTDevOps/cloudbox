@@ -25,11 +25,13 @@ docker logs cloudbox   # access token, then open http://localhost:8080
 | **Home**: the three tools of every workspace, terminal tips and the version of each tool in the image. | **Cheat sheet**: device-code sign-in commands completed with the workspace settings, typed into a terminal without being run. |
 | ![Workspace settings](docs/screenshots/settings.png) | ![Settings window, AI assistant tab](docs/screenshots/preferences.png) |
 | **Workspace settings**: name, environment (DEV / ACC / PRD), tenant, subscription, SharePoint URL, ClientId. | **Settings**: language, theme, panels of new workspaces, and the AI assistant (API keys, default model). |
-| ![Home page, dark theme](docs/screenshots/home-dark.png) | ![Settings window, Terminal tab](docs/screenshots/terminal-settings.png) |
-| **Dark theme**, following the system setting or chosen in Settings. The interface is available in English and French. | **Terminal appearance**: font, size, line height, cursor, colours, path bar. Applied right away to every open terminal. |
+| ![New workspace window, with the folder picker open](docs/screenshots/new-workspace.png) | ![Settings window, Terminal tab](docs/screenshots/terminal-settings.png) |
+| **New workspace**: name, ID, environment, working folder (typed or picked among the folders of `/home/dev`) and the panels to open. | **Terminal appearance**: font, size, line height, cursor, colours, path bar. Applied right away to every open terminal. |
+| ![Home page, light theme](docs/screenshots/home-light.png) | |
+| **Light theme**: the screenshots above use the dark theme. The theme follows the system setting or is chosen in Settings; the interface is available in English and French. | |
 
 The screenshots are produced by [`docs/screenshots/capture.sh`](docs/screenshots/capture.sh)
-(headless Chromium on a throwaway container with sample workspaces).
+(headless Chromium on a throwaway container with sample workspaces, dark theme except `home-light.png`).
 
 ## How it works
 
@@ -247,7 +249,8 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 
 - A sidebar, always visible, lists the workspaces (coloured by environment) and creates new
   ones: name, ID, **DEV / ACC / PRD** environment, working folder (by default
-  `/home/dev/workspaces/<id>`) and the panels to open (PowerShell, Bash, VS Code, Assistant).
+  `/home/dev/workspaces/<id>`, typed or picked with the folder button among the non-hidden folders
+  of `/home/dev`) and the panels to open (PowerShell, Bash, VS Code, Assistant).
   It collapses to a column of icons.
 - **Settings** (⚙ at the bottom of the sidebar), stored in the volume
   (`~/.cloudbox/preferences.json`): language, theme (system, light, dark), the environment and
@@ -257,6 +260,9 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
   Cascadia Mono or Consolas, or any CSS font list), size, line height, cursor style, and light or
   dark colours (by default, those of the portal). Changes apply right away to every open terminal,
   including the plain `/term/pwsh/` and `/term/bash/` pages.
+- **Panel tabs**: the **+** after the tabs of a group opens another terminal of the same kind in
+  that group; on the right, open the panel alone in a new browser tab (same tmux session for a
+  terminal) and maximize or restore the group.
 - **Path bar** above each terminal panel: the current folder as read by tmux, refreshed every
   2 seconds. Clicking a segment types `cd '<folder>'` into the terminal without running it; the
   segments are disabled while a command is running. The ⧉ button copies the path. The parts outside

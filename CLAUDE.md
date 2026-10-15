@@ -160,6 +160,13 @@ Un **workspace** (un client, un projet, un environnement) regroupe des panneaux 
 Bash et VS Code dans une disposition redimensionnable, sauvegardée dans le volume
 (`/home/dev/.cloudbox/workspaces/<id>.json`). Chaque panneau terminal a sa session tmux
 (`<workspace>-<shell>[-n]`), VS Code s'ouvre sur le dossier du workspace.
+Charte : thème sombre bleu nuit (maquettes de l'utilisateur) et thème clair dérivé, couleurs en
+variables CSS (`styles.css`), icônes SVG intégrées (`icons.tsx`, évocations simplifiées des marques,
+jamais les logos officiels ni de ressource externe), illustration de l'accueil en SVG (`hero.tsx`).
+VS Code suit le thème du système (`window.autoDetectColorScheme`, réglage « machine »).
+Le formulaire de création propose un sélecteur de dossier (`GET /api/folders?path=`, dossiers non
+cachés de `/home/dev`, liens résolus, jamais au-dessus). Les onglets Dockview ont « + » (terminal du
+même type dans le groupe), « ouvrir dans un onglet du navigateur » et « agrandir ».
 La fenêtre « ⚙ Paramètres » de la barre latérale (onglets Général, Workspaces, Assistant IA)
 enregistre les préférences du portail dans `/home/dev/.cloudbox/preferences.json` (`GET/PUT
 /api/preferences`) : thème (auto / clair / sombre, mis en cache dans `localStorage` pour le premier

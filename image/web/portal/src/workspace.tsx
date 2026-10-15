@@ -10,6 +10,7 @@ import { ConnectionsDrawer } from './connections';
 import { ContextBar } from './context';
 import { CONNECTIONS_EVENT, isConnectionsShortcut, mountDock, type DockHandle } from './dock';
 import { EnvBadge, TopBar } from './home';
+import { Icon } from './icons';
 import { t } from './i18n';
 import { WorkspaceSettingsForm } from './settings';
 import { workspaceStore } from './store';
@@ -36,7 +37,10 @@ function DeleteWorkspaceForm({ ws, onCancel, onDeleted }: { ws: Workspace; onCan
   };
   return (
     <form class="card delete-ws" onSubmit={remove}>
-      <h2>{m.confirmTitle(ws.name)}</h2>
+      <div class="dialog-head">
+        <span class="icon-tile large"><Icon name="trash" size={26} /></span>
+        <h2>{m.confirmTitle(ws.name)}</h2>
+      </div>
       <ul>
         <li>{m.confirmSessions}</li>
         <li>{m.confirmAssistant}</li>
@@ -206,32 +210,38 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
           </div>
         </div>
         <ContextBar showShared />
+        <div class="ws-head-actions">
+          <button type="button" class="button ws-settings-button" onClick={openSettings} title={m.workspace.settingsTitle}>
+            <Icon name="gear" size={17} /> {m.common.settings}
+          </button>
+          <button type="button" class="button danger ws-delete" onClick={openDelete} title={t().settings.deleteTitle}>
+            <Icon name="trash" size={17} /> {t().settings.deleteButton}
+          </button>
+          <button type="button" class={`button${drawer ? ' primary' : ''} conn-toggle`} onClick={() => toggleDrawer()}
+            aria-expanded={drawer} title={m.workspace.connectionsTitle}>
+            <Icon name="book" size={17} /> {m.common.connections}
+          </button>
+        </div>
       </TopBar>
-      <div class="ws-toolbar">
-        <button type="button" class="button" onClick={() => dock?.addPanel('pwsh')}>+ PowerShell</button>
-        <button type="button" class="button" onClick={() => dock?.addPanel('bash')}>+ Bash</button>
-        <button type="button" class="button" onClick={() => dock?.addPanel('code')}
-          title={dock?.hasCode() ? m.workspace.codeOpen : ''}>
-          {dock?.hasCode() ? 'VS Code' : '+ VS Code'}
+      <div class="ws-toolbar" title={m.workspace.autosave}>
+        <button type="button" class="button add-panel kind-pwsh" onClick={() => dock?.addPanel('pwsh')} title={m.workspace.add('PowerShell')}>
+          <Icon name="pwsh" size={20} /> PowerShell
+        </button>
+        <button type="button" class="button add-panel kind-bash" onClick={() => dock?.addPanel('bash')} title={m.workspace.add('Bash')}>
+          <Icon name="bash" size={20} /> Bash
+        </button>
+        <button type="button" class={`button add-panel kind-code${dock?.hasCode() ? ' is-open' : ''}`} onClick={() => dock?.addPanel('code')}
+          title={dock?.hasCode() ? m.workspace.codeOpen : m.workspace.add('VS Code')}>
+          <Icon name="code" size={20} /> VS Code
         </button>
         {assistant?.enabled && (
-          <button type="button" class="button" onClick={() => dock?.addPanel('assistant')}
-            title={dock?.hasAssistant() ? m.workspace.assistantOpen : ''}>
-            {dock?.hasAssistant() ? '✦ Assistant' : '+ ✦ Assistant'}
+          <button type="button" class={`button add-panel kind-assistant${dock?.hasAssistant() ? ' is-open' : ''}`}
+            onClick={() => dock?.addPanel('assistant')}
+            title={dock?.hasAssistant() ? m.workspace.assistantOpen : m.workspace.add('Assistant')}>
+            <Icon name="sparkle" size={20} /> Assistant
           </button>
         )}
         {error && <span class="error">{error}</span>}
-        <span class="muted toolbar-hint">{m.workspace.autosave}</span>
-        <button type="button" class="button ghost" onClick={openSettings} title={m.workspace.settingsTitle}>
-          ⚙ {m.common.settings}
-        </button>
-        <button type="button" class="button ghost danger ws-delete" onClick={openDelete} title={t().settings.deleteTitle}>
-          🗑 {t().settings.deleteButton}
-        </button>
-        <button type="button" class={`button${drawer ? ' primary' : ''} conn-toggle`} onClick={() => toggleDrawer()}
-          aria-expanded={drawer} title={m.workspace.connectionsTitle}>
-          {m.common.connections}
-        </button>
       </div>
       <div class="ws-body">
         <Dock ws={ws} onReady={setDock} onError={setError} />
@@ -240,7 +250,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
         )}
       </div>
       <dialog class="create-dialog settings-dialog" ref={settingsDialog} aria-label={m.workspace.settingsDialog}>
-        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => settingsDialog.current?.close()}>×</button>
+        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => settingsDialog.current?.close()}><Icon name="close" size={18} /></button>
         {settingsKey > 0 && (
           <WorkspaceSettingsForm key={settingsKey} ws={ws} onCancel={() => settingsDialog.current?.close()}
             onSaved={(saved) => {
@@ -252,7 +262,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
         )}
       </dialog>
       <dialog class="create-dialog delete-dialog" ref={deleteDialog} aria-label={t().settings.deleteTitle}>
-        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => deleteDialog.current?.close()}>×</button>
+        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => deleteDialog.current?.close()}><Icon name="close" size={18} /></button>
         {deleteKey > 0 && (
           <DeleteWorkspaceForm key={deleteKey} ws={ws} onCancel={() => deleteDialog.current?.close()}
             onDeleted={() => {

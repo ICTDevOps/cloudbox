@@ -46,6 +46,13 @@ export interface Preferences {
   terminal: TerminalPrefs;
 }
 
+// Sous-dossiers d'un dossier de /home/dev (sélecteur du formulaire de création)
+export interface FolderList {
+  path: string;
+  parent: string | null;
+  folders: string[];
+}
+
 // Dossier courant et commande en cours d'un terminal du workspace (barre de chemin)
 export interface TerminalState {
   session: string;
@@ -270,6 +277,7 @@ export const api = {
   getWorkspace: (id: string) => request<Workspace>('GET', `/api/workspaces/${id}`),
   terminals: async (id: string) => (await request<{ terminals: TerminalState[] }>('GET', `/api/workspaces/${id}/terminals`)).terminals,
   preferences: () => request<Preferences>('GET', '/api/preferences'),
+  folders: (path: string) => request<FolderList>('GET', `/api/folders?path=${encodeURIComponent(path)}`),
   updatePreferences: (data: { theme?: Theme; newWorkspace?: Partial<Preferences['newWorkspace']>; terminal?: Partial<TerminalPrefs> }) =>
     request<Preferences>('PUT', '/api/preferences', data),
   createWorkspace: (data: { id: string; name: string; env: Env; folder?: string; panels?: PanelKind[] }) =>

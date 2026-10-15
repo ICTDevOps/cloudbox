@@ -162,6 +162,11 @@ expect "POST workspace client" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client
 expect "panneaux choisis à la création" "pwsh,code,bash" "$(docker exec "$NAME" jq -r '.initialPanels | join(",")' /home/dev/.cloudbox/workspaces/client.json)"
 expect "POST workspace client-prd" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client-prd","name":"Client PRD","env":"prd"}' "$BASE/api/workspaces")"
 expect "panneaux des préférences par défaut" "bash,code" "$(docker exec "$NAME" jq -r '.initialPanels | join(",")' /home/dev/.cloudbox/workspaces/client-prd.json)"
+# Sélecteur de dossiers : sous-dossiers de /home/dev, sans les cachés, jamais au-dessus
+expect "GET dossiers de /home/dev" "workspaces" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/folders" | docker exec -i "$NAME" jq -r '.folders | map(select(. == "workspaces")) | join(",")')"
+expect "GET dossiers : cachés exclus" 0 "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/folders" | docker exec -i "$NAME" jq '[.folders[] | select(startswith("."))] | length')"
+expect "GET dossiers hors /home/dev" 400 "$(api "$BASE/api/folders?path=/etc")"
+expect "GET dossiers ../.." 400 "$(api "$BASE/api/folders?path=/home/dev/../..")"
 expect "POST doublon" 409 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev"}' "$BASE/api/workspaces")"
 expect "dossier créé" "dev" "$(docker exec "$NAME" stat -c %U /home/dev/workspaces/client)"
 expect "liste des workspaces" "client client-prd" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces" | docker exec -i "$NAME" jq -r '[.[].id] | sort | join(" ")')"
