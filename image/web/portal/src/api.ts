@@ -58,12 +58,24 @@ export interface FolderList {
 }
 
 // Dossier courant et commande en cours d'un terminal du workspace (barre de chemin)
+// Sessions ouvertes dans le processus d'un terminal PowerShell (publiées par son prompt)
+export type TerminalService = 'azps' | 'graph' | 'exo' | 'teams' | 'pnp';
+export interface TerminalConnection {
+  user?: string;
+  tenantId?: string;
+  subscription?: string;
+  subscriptionId?: string;
+  url?: string;
+}
+export type TerminalConnections = Partial<Record<TerminalService, TerminalConnection>>;
+
 export interface TerminalState {
   session: string;
   cwd: string;
   command: string;
   idle: boolean;
   identities: IdentityMode; // fixées à l'ouverture du terminal
+  connections: TerminalConnections;
   stale?: boolean; // calculé par le portail : connexions différentes de celles du workspace
 }
 
@@ -96,6 +108,8 @@ export interface CloudContext {
   azPowerShell: AzureContext | null;
   kubernetes: { context: string; namespace: string } | null;
   github: { host: string; user: string } | null;
+  m365: { user: string; tenantId: string; cloud: string } | null; // CLI for Microsoft 365, commun
+  terminals: { session: string; identities: IdentityMode; connections: TerminalConnections }[]; // avec une session ouverte
   identities: IdentityMode;
   shared: ContextTool[]; // outils dont la connexion est commune à tous les workspaces
   sharedAcrossWorkspaces: boolean;

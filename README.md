@@ -283,15 +283,26 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 - **Cheat sheet** (button on the right of the toolbar, or Ctrl+Shift+K, including from a
   terminal): panel of sign-in commands, completed with the workspace settings. Each command can
   be copied, or typed with one click into the last terminal used (a PowerShell terminal for
-  cmdlets), **without being run**: review it, then press Enter. The actual state is shown when
-  the portal can read it (az CLI, Az PowerShell, kubectl, gh), with a warning when az is signed in
-  to another tenant or subscription than the workspace ones; Graph, Exchange, Teams and PnP depend
-  on each PowerShell session and are not visible.
+  cmdlets), **without being run**: review it, then press Enter. Each command shows the actual
+  state of its service (the same as the workspace toolbar, see below), with a warning when it is
+  signed in to another tenant or subscription than the workspace ones.
 - A PRD workspace is framed in red, and the prompt of its shells carries a `PRD <id>` badge.
-- The displayed context (az CLI subscription, Az PowerShell context, Kubernetes cluster) is read
-  from the actual configuration files, never declared. The shell prompt also shows the az CLI
-  subscription (`az:`) and, in PowerShell, the Az context (`AzPS:`) once the `Az.Accounts`
-  module is loaded: these are two separate contexts.
+- **What is actually signed in** (right of the workspace toolbar), read and never declared, in
+  three groups (a click opens the cheat sheet):
+  - **Azure**: az CLI (subscription of the workspace configuration) and Az PowerShell (saved
+    context, plus the context of each PowerShell terminal);
+  - **M365**: Graph, Exchange Online, Teams and PnP, whose sessions live in each PowerShell
+    process (`×2` when signed in in two terminals; the tooltip names them), and CLI for
+    Microsoft 365 (common to all workspaces);
+  - **Kubernetes**: current context and namespace.
+
+  A green dot means a session is open, grey not signed in, orange another tenant or subscription
+  than the declared one. The portal makes no network call: “signed in” means a session or a
+  saved context exists, not that its token is still valid. The PowerShell prompt publishes the
+  sessions of its terminal (Teams has no status cmdlet: `Connect-MicrosoftTeams` is wrapped to
+  remember the account), and each PowerShell panel's path bar shows its own sessions as badges.
+- The shell prompt also shows the az CLI subscription (`az:`) and, in PowerShell, the Az context
+  (`AzPS:`) once the `Az.Accounts` module is loaded: these are two separate contexts.
 
 ### Per-workspace sign-ins
 
@@ -310,8 +321,8 @@ its own folders in `~/.cloudbox/identities/<id>/`, given to its terminals throug
 | CLI for Microsoft 365 | none available | **no** |
 | Graph, Exchange Online, Teams, PnP | in the PowerShell process | per terminal |
 
-- The toolbar shows **🔒 isolated sign-ins**, and the context it displays is the one of the
-  workspace's terminals.
+- The toolbar shows a **🔒** (details in its tooltip), and the context it displays is the one of
+  the workspace's terminals.
 - **The VS Code terminal is not isolated**: code-server is a single instance for all workspaces,
   so its terminal uses the common sign-ins, like `docker exec`. Use the workspace's PowerShell and
   Bash panels for anything tied to a tenant.

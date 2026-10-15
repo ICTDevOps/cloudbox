@@ -91,9 +91,12 @@ async function systemPrompt(o: TurnOptions): Promise<string> {
     '## Contexte réel (lu à l\'instant, fait foi sur les valeurs déclarées)',
     (context.identities === 'isolated'
       ? 'Connexions isolées : az, azd, Az PowerShell (Connect-AzAccount), gh et le contexte kubectl sont propres à ce ' +
-        'workspace ; CLI for Microsoft 365 reste commun ; Graph, Exchange, Teams et PnP se connectent terminal par terminal.'
+        'workspace ; CLI for Microsoft 365 (m365) reste commun.'
       : 'Connexions partagées : az, Az PowerShell et kubectl sont communs à tous les workspaces en mode partagé.') +
-      ' Si l\'abonnement ou le tenant réel diffère de celui déclaré, signale-le avant toute commande.',
+      ' Graph, Exchange, Teams, PnP et le contexte Az PowerShell du processus sont propres à chaque terminal PowerShell : ' +
+      '« terminals » liste ceux qui ont une session ouverte (absent de la liste = non connecté). Une commande qui en ' +
+      'dépend doit viser un terminal connecté. Si l\'abonnement ou le tenant réel diffère de celui déclaré, signale-le ' +
+      'avant toute commande.',
     '```json',
     JSON.stringify(context, null, 2),
     '```',

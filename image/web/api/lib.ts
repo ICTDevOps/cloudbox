@@ -450,12 +450,43 @@ export async function workspaceSessions(id: string): Promise<string[]> {
   return (await tmuxSessions()).filter((s) => re.test(s));
 }
 
+// Connexions ouvertes dans le processus d'un terminal PowerShell, publiées par son prompt (option tmux
+// du panneau @cloudbox_conn, JSON) : Az PowerShell (contexte du processus), Graph, Exchange, Teams, PnP
+export const TERMINAL_SERVICES = ['azps', 'graph', 'exo', 'teams', 'pnp'] as const;
+export type TerminalService = (typeof TERMINAL_SERVICES)[number];
+const CONNECTION_FIELDS = ['user', 'tenantId', 'subscription', 'subscriptionId', 'url'] as const;
+export type TerminalConnection = Partial<Record<(typeof CONNECTION_FIELDS)[number], string>>;
+export type TerminalConnections = Partial<Record<TerminalService, TerminalConnection>>;
+
+// Valeur écrite par le terminal : seuls les services et champs connus, en texte court, sont gardés
+export function parseConnections(raw: string): TerminalConnections {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  const out: TerminalConnections = {};
+  if (!isRecord(data)) return out;
+  for (const service of TERMINAL_SERVICES) {
+    const v = data[service];
+    if (!isRecord(v)) continue;
+    const c: TerminalConnection = {};
+    for (const f of CONNECTION_FIELDS) {
+      if (typeof v[f] === 'string' && v[f]) c[f] = (v[f] as string).slice(0, 200);
+    }
+    out[service] = c;
+  }
+  return out;
+}
+
 export interface TerminalState {
   session: string;
   cwd: string; // dossier courant du panneau tmux (celui du processus au premier plan)
   command: string;
   idle: boolean; // le shell attend une commande (rien ne tourne au premier plan)
   identities: IdentityMode; // connexions du terminal, fixées à son ouverture
+  connections: TerminalConnections; // sessions ouvertes dans le processus (PowerShell seulement)
 }
 
 // Dossier courant et commande en cours des terminaux d'un workspace (barre de chemin du portail).
@@ -464,16 +495,20 @@ export async function workspaceTerminals(id: string): Promise<TerminalState[]> {
   const re = sessionPattern(id);
   let out: string;
   try {
-    out = await run('tmux', ['list-panes', '-a', '-F', '#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_current_path}\t#{pane_current_command}']);
+    out = await run('tmux', ['list-panes', '-a', '-F',
+      '#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_current_path}\t#{pane_current_command}\t#{@cloudbox_conn}']);
   } catch {
     return []; // pas de serveur tmux : aucune session
   }
   const terminals = new Map<string, TerminalState>();
   for (const line of out.split('\n')) {
-    const [session, , , cwd, command = ''] = line.split('\t');
+    const [session, , , cwd, command = '', conn = ''] = line.split('\t');
     if (!session || !re.test(session) || terminals.has(session)) continue;
     const shell = session.split('_')[1];
-    terminals.set(session, { session, cwd: cwd ?? '', command, idle: command === shell, identities: 'shared' });
+    terminals.set(session, {
+      session, cwd: cwd ?? '', command, idle: command === shell, identities: 'shared',
+      connections: conn ? parseConnections(conn) : {},
+    });
   }
   const list = [...terminals.values()];
   await Promise.all(list.map(async (t) => (t.identities = await sessionIdentity(t.session))));
@@ -546,6 +581,22 @@ export async function githubContext(env: Record<string, string> = {}): Promise<R
   }
 }
 
+// CLI for Microsoft 365 : connexion active lue dans ~/.cli-m365-connection.json (os.homedir(), commune
+// à tous les workspaces), sans appel réseau. Le fichier contient aussi les jetons : jamais renvoyés.
+export async function m365Context(): Promise<Record<string, string> | null> {
+  try {
+    const c = await readJson(path.join(HOME, '.cli-m365-connection.json'));
+    if (!isRecord(c) || c.active !== true) return null;
+    return {
+      user: String(c.identityName ?? ''),
+      tenantId: String(c.identityTenantId ?? ''),
+      cloud: typeof c.cloudType === 'string' ? c.cloudType : '',
+    };
+  } catch {
+    return null; // fichier absent ou vidé (m365 logout)
+  }
+}
+
 export async function kubernetesContext(env: Record<string, string> = {}): Promise<Record<string, string> | null> {
   const kubeEnv = env.KUBECONFIG ? { KUBECONFIG: env.KUBECONFIG } : undefined;
   try {
@@ -563,15 +614,23 @@ export async function kubernetesContext(env: Record<string, string> = {}): Promi
 // Contexte réel commun (accueil) ou d'un workspace : ce que ses terminaux utilisent réellement
 export async function cloudContext(ws?: Workspace) {
   const env = ws ? identityEnv(ws) : {};
-  const [azureCli, azPowerShell, kubernetes, github] = await Promise.all([
+  const [azureCli, azPowerShell, kubernetes, github, m365, panes] = await Promise.all([
     azureCliContext(env),
     azPowerShellContext(env),
     kubernetesContext(env),
     githubContext(env),
+    m365Context(),
+    ws ? workspaceTerminals(ws.id) : Promise.resolve([]),
   ]);
   const shared = ws ? sharedTools(ws) : [...CONTEXT_TOOLS];
+  // Connexions propres à chaque terminal (Graph, Exchange, Teams, PnP, Az PowerShell du processus)
+  const terminals = panes
+    .filter((p) => Object.keys(p.connections).length)
+    .map(({ session, identities, connections }) => ({ session, identities, connections }));
   return {
     azureCli, azPowerShell, kubernetes, github,
+    m365, // toujours commun (dossier non configurable)
+    terminals,
     identities: ws ? identityMode(ws) : ('shared' as IdentityMode),
     shared,
     sharedAcrossWorkspaces: shared.length === CONTEXT_TOOLS.length,

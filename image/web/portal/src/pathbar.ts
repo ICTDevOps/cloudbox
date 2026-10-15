@@ -1,7 +1,9 @@
 // Barre de chemin des panneaux terminaux d'un workspace : dossier courant lu par tmux
 // (GET /api/workspaces/:id/terminals), en fil d'Ariane. Un clic sur un segment saisit « cd '…' »
 // dans le terminal, sans Entrée (l'utilisateur valide), et seulement quand aucune commande ne tourne.
+// À droite, les sessions ouvertes dans ce terminal (Az PowerShell, Graph, Exchange, Teams, PnP).
 import { api, type TerminalState } from './api';
+import { connectionLine, SERVICES, TERMINAL_SERVICES } from './connstatus';
 import { t } from './i18n';
 import { prefsStore } from './prefs';
 
@@ -106,6 +108,7 @@ function within(path: string, folder: string): boolean {
 export class PathBar {
   readonly element = document.createElement('div');
   private readonly crumbsEl = document.createElement('div');
+  private readonly connEl = document.createElement('span');
   private readonly busyEl = document.createElement('span');
   private readonly staleEl = document.createElement('span');
   private readonly copyEl = document.createElement('button');
@@ -125,13 +128,14 @@ export class PathBar {
     this.element.className = 'path-bar';
     this.element.setAttribute('role', 'navigation');
     this.crumbsEl.className = 'path-crumbs';
+    this.connEl.className = 'path-conn';
     this.busyEl.className = 'path-busy';
     this.staleEl.className = 'path-stale';
     this.copyEl.type = 'button';
     this.copyEl.className = 'path-copy';
     this.copyEl.textContent = '⧉';
     this.copyEl.addEventListener('click', () => void this.copy());
-    this.element.append(this.crumbsEl, this.staleEl, this.busyEl, this.copyEl);
+    this.element.append(this.crumbsEl, this.connEl, this.staleEl, this.busyEl, this.copyEl);
     this.applyPrefs();
     this.unsubscribePrefs = prefsStore.subscribe(() => {
       this.applyPrefs();
@@ -161,6 +165,7 @@ export class PathBar {
     // Terminal ouvert avant l'isolation ou avant un changement de mode des connexions
     this.staleEl.textContent = state?.stale ? `⚠ ${m.stale}` : '';
     this.staleEl.title = state?.stale ? m.staleTitle : '';
+    this.renderConnections(state);
     const nodes: Node[] = [];
     if (state?.cwd) {
       const list = crumbs(state.cwd);
@@ -187,6 +192,22 @@ export class PathBar {
     const line = document.createElement('span');
     line.append(...nodes);
     this.crumbsEl.replaceChildren(line);
+  }
+
+  private renderConnections(state: TerminalState | undefined): void {
+    const sep = document.documentElement.lang === 'fr' ? ' : ' : ': ';
+    const badges = TERMINAL_SERVICES.flatMap((id) => {
+      const c = state?.connections?.[id];
+      if (!c) return [];
+      const b = document.createElement('span');
+      b.className = 'path-svc';
+      b.dataset.svc = id;
+      b.textContent = SERVICES[id].label;
+      b.title = `${SERVICES[id].name}${sep}${connectionLine(c)}\n${t().context.sessionNote}`;
+      return [b];
+    });
+    this.connEl.replaceChildren(...badges);
+    this.connEl.setAttribute('aria-label', t().pathBar.connections);
   }
 
   private async cd(path: string): Promise<void> {

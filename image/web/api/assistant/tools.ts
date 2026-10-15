@@ -61,7 +61,8 @@ export const TOOLS: ToolSpec[] = [
       "Propose une commande à exécuter dans un terminal du workspace. L'utilisateur la voit, peut la modifier, " +
       "puis la valide ou la refuse ; si elle est validée, elle est lancée dans son terminal actif et tu reçois la " +
       'sortie. Une seule ligne, non interactive (pas de confirmation à saisir, pas de pager). ' +
-      'Les connexions PowerShell déjà ouvertes (Connect-MgGraph, Connect-ExchangeOnline…) sont disponibles.',
+      'Les connexions PowerShell (Connect-MgGraph, Connect-ExchangeOnline…) sont celles du terminal visé : ' +
+      'voir « terminals » dans le contexte réel.',
     parameters: {
       type: 'object',
       properties: {
@@ -92,10 +93,11 @@ function cap(text: string, max = MAX_TOOL_OUTPUT): string {
   return text.length > max ? `[… ${text.length - max} caractères tronqués au début …]\n${text.slice(-max)}` : text;
 }
 
-// Contexte réel des terminaux du workspace (connexions isolées ou partagées), sans GitHub
+// Contexte réel des terminaux du workspace (connexions isolées ou partagées, sessions ouvertes dans
+// chaque terminal PowerShell, CLI for Microsoft 365), sans GitHub
 export async function cloudContext(ws: Workspace) {
-  const { azureCli, azPowerShell, kubernetes, identities, shared, sharedAcrossWorkspaces } = await readCloudContext(ws);
-  return { azureCli, azPowerShell, kubernetes, identities, shared, sharedAcrossWorkspaces };
+  const { azureCli, azPowerShell, kubernetes, m365, terminals, identities, shared, sharedAcrossWorkspaces } = await readCloudContext(ws);
+  return { azureCli, azPowerShell, kubernetes, m365, terminals, identities, shared, sharedAcrossWorkspaces };
 }
 
 // --- Terminaux ---

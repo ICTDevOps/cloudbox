@@ -57,6 +57,25 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
 }
 BICEP
 
+# Connexions fictives du workspace de production : profil az du workspace, CLI for Microsoft 365 et,
+# dès que le portail a ouvert son terminal PowerShell, sessions Az PowerShell, Graph et Exchange
+# (option tmux que publie le prompt ; sans connexion réelle, le prompt ne la réécrit pas)
+docker exec "$NAME" bash -c "d=~/.cloudbox/identities/contoso-prd/azure; mkdir -p \$d && printf '%s' \
+    '{\"subscriptions\":[{\"id\":\"8b1c2d3e-4f5a-4b6c-9d7e-0f1a2b3c4d5e\",\"name\":\"Contoso Production\",\"tenantId\":\"c0a1b2c3-d4e5-4f60-8a9b-0c1d2e3f4a5b\",\"isDefault\":true,\"user\":{\"name\":\"admin@contoso.onmicrosoft.com\"}}]}' > \$d/azureProfile.json"
+docker exec "$NAME" bash -c "printf '%s' '{\"active\":true,\"identityName\":\"admin@contoso.onmicrosoft.com\",\"identityTenantId\":\"c0a1b2c3-d4e5-4f60-8a9b-0c1d2e3f4a5b\",\"cloudType\":\"Public\"}' > ~/.cli-m365-connection.json"
+CONN='{"azps":{"user":"admin@contoso.onmicrosoft.com","tenantId":"c0a1b2c3-d4e5-4f60-8a9b-0c1d2e3f4a5b","subscription":"Contoso Production"},"graph":{"user":"admin@contoso.onmicrosoft.com","tenantId":"c0a1b2c3-d4e5-4f60-8a9b-0c1d2e3f4a5b"},"exo":{"user":"admin@contoso.onmicrosoft.com","tenantId":"c0a1b2c3-d4e5-4f60-8a9b-0c1d2e3f4a5b"}}'
+(
+    for _ in $(seq 1 180); do
+        s=$(docker exec "$NAME" tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -m1 '^contoso-prd_pwsh_' || true)
+        if [[ -n $s ]]; then
+            sleep 3
+            docker exec "$NAME" tmux set-option -p -t "$s" @cloudbox_conn "$CONN"
+            break
+        fi
+        sleep 1
+    done
+) &
+
 docker create --name "$NAME-pw" --network "container:$NAME" -w /work \
     "mcr.microsoft.com/playwright/python:$PLAYWRIGHT_VERSION" \
     bash -c "pip install -q --root-user-action=ignore playwright==${PLAYWRIGHT_VERSION%%-*} >/dev/null 2>&1 && mkdir -p /out && python3 /work/capture.py $TOKEN /out" >/dev/null

@@ -209,7 +209,6 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
             <code class="muted">{ws.folder}</code>
           </div>
         </div>
-        <ContextBar wsId={ws.id} />
         <div class="ws-head-actions">
           <button type="button" class="button ws-settings-button" onClick={openSettings} title={m.workspace.settingsTitle}>
             <Icon name="gear" size={17} /> {m.common.settings}
@@ -242,6 +241,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
           </button>
         )}
         {error && <span class="error">{error}</span>}
+        <ContextBar wsId={ws.id} settings={ws.settings} onOpen={() => toggleDrawer(true)} />
       </div>
       <div class="ws-body">
         <Dock ws={ws} onReady={setDock} onError={setError} />
