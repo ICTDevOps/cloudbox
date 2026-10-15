@@ -193,6 +193,40 @@ sleep 1
 expect "GET terminaux : dossier courant (PowerShell)" "client_pwsh_1 /tmp true" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client/terminals" | docker exec -i "$NAME" jq -r '.terminals[] | "\(.session) \(.cwd) \(.idle)"')"
 probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'Set-Location ~/workspaces/client' >/dev/null
 expect "GET terminaux d'un workspace inconnu" 404 "$(api "$BASE/api/workspaces/inconnu/terminals")"
+# Connexions par workspace : isolées par défaut (az, azd, gh, contexte kubectl), partagées sur demande
+IDS=/home/dev/.cloudbox/identities
+ctxq() { docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/$1/context" | docker exec -i "$NAME" jq -r "$2"; }
+out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" '"ids=" + $env:CLOUDBOX_IDENTITIES + " az=" + $env:AZURE_CONFIG_DIR + " azd=" + $env:AZD_CONFIG_DIR + " gh=" + $env:GH_CONFIG_DIR + " kube=" + $env:KUBECONFIG')
+grep -q "ids=isolated az=$IDS/client/azure azd=$IDS/client/azd gh=$IDS/client/gh kube=$IDS/client/kube/config:/home/dev/.kube/config" <<<"$out" \
+    && pass "terminal isolé : dossiers de connexion du workspace" || fail "terminal isolé : $(tail -c 400 <<<"$out")"
+expect "dossier des connexions en 0700" 700 "$(docker exec "$NAME" stat -c %a "$IDS/client")"
+# kubeconfig neuf du workspace (sans contexte courant) : le prompt Cloudbox reste affiché
+out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'prompt')
+grep -q 'DEV client' <<<"$out" && pass "prompt PowerShell d'un terminal isolé" || fail "prompt PowerShell isolé : $(tail -c 300 <<<"$out")"
+out=$(probe "$BASE/term/bash/ws?arg=client~13" "$TOKEN" "$BASE" 'echo "ps1=${PS1:0:60}"')
+grep -q 'ps1=.*DEV client' <<<"$out" && pass "prompt Bash d'un terminal isolé" || fail "prompt Bash isolé : $(tail -c 300 <<<"$out")"
+docker exec "$NAME" tmux kill-session -t '=client_bash_13'
+# Faux profil az dans le workspace client, faux kubeconfig commun à deux contextes
+docker exec "$NAME" bash -c "printf '{\"subscriptions\":[{\"id\":\"1\",\"name\":\"abo-client\",\"tenantId\":\"t\",\"isDefault\":true,\"user\":{\"name\":\"u\"}}]}' > $IDS/client/azure/azureProfile.json"
+docker exec "$NAME" bash -c 'mkdir -p ~/.kube && printf "apiVersion: v1\nkind: Config\nclusters:\n- name: c1\n  cluster: {server: https://c1.invalid}\n- name: c2\n  cluster: {server: https://c2.invalid}\nusers:\n- name: u\n  user: {token: x}\ncontexts:\n- name: ctx1\n  context: {cluster: c1, user: u}\n- name: ctx2\n  context: {cluster: c2, user: u}\ncurrent-context: ctx1\n" > ~/.kube/config'
+expect "contexte du workspace isolé (az)" "abo-client isolated false azPowerShell" "$(ctxq client '"\(.azureCli.subscription) \(.identities) \(.sharedAcrossWorkspaces) \(.shared | join(","))"')"
+expect "connexion az d'un autre workspace invisible" "null" "$(ctxq client-prd '.azureCli')"
+probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'kubectl config use-context ctx2' >/dev/null
+expect "contexte kubectl propre au workspace" "ctx2 ctx1" "$(ctxq client .kubernetes.context) $(ctxq client-prd .kubernetes.context)"
+expect "kubeconfig commun inchangé" "ctx1" "$(docker exec "$NAME" sed -n 's/^current-context: //p' /home/dev/.kube/config)"
+out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'prompt')
+grep -q '⎈ ctx2' <<<"$out" && pass "prompt PowerShell : contexte kubectl du workspace" || fail "prompt PowerShell : $(tail -c 300 <<<"$out")"
+expect "GET terminaux : connexions" "isolated isolated false" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client/terminals" | docker exec -i "$NAME" jq -r '"\(.identities) \(.terminals[0].identities) \(.terminals[0].stale // false)"')"
+expect "PUT connexions invalides" 400 "$(api -X PUT "${JSON[@]}" -d '{"identities":"aucune"}' "$BASE/api/workspaces/client")"
+# Passage en mode partagé : le terminal déjà ouvert garde ses connexions isolées (signalé)
+expect "PUT connexions partagées" 200 "$(api -X PUT "${JSON[@]}" -d '{"identities":"shared"}' "$BASE/api/workspaces/client")"
+expect "terminal ouvert avant le changement de mode" "shared isolated" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client/terminals" | docker exec -i "$NAME" jq -r '"\(.identities) \(.terminals[0].identities)"')"
+out=$(probe "$BASE/term/bash/ws?arg=client~12" "$TOKEN" "$BASE" 'echo "ids=$CLOUDBOX_IDENTITIES az=${AZURE_CONFIG_DIR:-commun} kube=${KUBECONFIG:-commun}"')
+grep -q 'ids=shared az=commun kube=commun' <<<"$out" && pass "terminal partagé : configuration commune" || fail "terminal partagé : $(tail -c 300 <<<"$out")"
+expect "contexte du workspace partagé" "ctx1 shared true" "$(ctxq client '"\(.kubernetes.context) \(.identities) \(.sharedAcrossWorkspaces)"')"
+docker exec "$NAME" tmux kill-session -t '=client_bash_12'
+expect "PUT connexions isolées" 200 "$(api -X PUT "${JSON[@]}" -d '{"identities":"isolated"}' "$BASE/api/workspaces/client")"
+expect "POST connexions invalides à la création" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"dev","identities":"x"}' "$BASE/api/workspaces")"
 # Paramètres de connexion : jeux de caractères stricts (les valeurs sont saisies dans un terminal)
 S="$BASE/api/workspaces/client"
 expect "PUT paramètres valides" 200 "$(api -X PUT "${JSON[@]}" -d '{"settings":{"tenant":"contoso.onmicrosoft.com","subscription":"11111111-2222-3333-4444-555555555555","sharepointUrl":"https://contoso.sharepoint.com/sites/it","clientId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}}' "$S")"
@@ -216,6 +250,7 @@ expect "DELETE session d'un autre workspace" 400 "$(api -X DELETE "${JSON[@]}" "
 expect "DELETE workspace client" 204 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/client")"
 expect "sessions restantes (client-prd intact)" "client-prd_bash_2" "$(docker exec "$NAME" tmux ls -F '#S' | grep _ | sort | tr '\n' ' ' | sed 's/ $//')"
 expect "dossier conservé après suppression" "yes" "$(docker exec "$NAME" test -d /home/dev/workspaces/client && echo yes)"
+expect "connexions isolées supprimées avec le workspace" "absent" "$(docker exec "$NAME" bash -c "test -e $IDS/client && echo present || echo absent")"
 expect "DELETE session client-prd_bash_2" 204 "$(api -X DELETE "${JSON[@]}" "$BASE/api/workspaces/client-prd/sessions/client-prd_bash_2")"
 h=$(docker exec "$NAME" curl -s -D - -o /dev/null "${AUTH[@]}" "$BASE/term/pwsh/" | tr -d '\r')
 grep -qi '^x-frame-options: SAMEORIGIN' <<<"$h" && pass "terminal affichable en iframe de même origine" || fail "X-Frame-Options du terminal"

@@ -178,6 +178,18 @@ La barre de chemin (`portal/src/pathbar.ts`) lit `GET /api/workspaces/:id/termin
 (`#{pane_current_path}` de tmux ; le prompt PowerShell aligne le dossier du processus sur
 `Set-Location`). Un clic sur un segment saisit `cd '…'` sans Entrée, comme l'aide-mémoire (panneau des commandes de connexion). Les panneaux choisis à la création
 (`initialPanels`) donnent la disposition de la première ouverture.
+**Connexions par workspace** (champ `identities` du JSON : `isolated`, défaut et champ absent, ou
+`shared`) : en mode isolé, `cloudbox-term` donne aux terminaux `AZURE_CONFIG_DIR`, `AZD_CONFIG_DIR`,
+`GH_CONFIG_DIR` dans `/home/dev/.cloudbox/identities/<id>/` et
+`KUBECONFIG=<id>/kube/config:~/.kube/config` (contexte courant et clusters ajoutés par
+`az aks get-credentials` propres au workspace ; namespace partagé, attribut du contexte). Mêmes
+variables dans `identityEnv` (`api/lib.ts`), à garder identiques. Az PowerShell n'a pas de dossier de
+contexte configurable (vérifié dans Az.Accounts) : il reste partagé et signalé ; ne jamais utiliser
+`Clear-AzContext` pour l'isoler (cache MSAL commun). CLI for Microsoft 365, VS Code et `docker exec`
+restent sur la configuration commune. Le mode est fixé à l'ouverture de la session tmux (variable
+`CLOUDBOX_IDENTITIES`) : un terminal d'un autre mode est signalé (prompt, barre de chemin) et
+l'assistant refuse d'y exécuter une commande. `GET /api/workspaces/:id/context` lit le contexte du
+workspace ; la suppression du workspace supprime son dossier d'identités.
 L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le contexte affiché
 (abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,
 y compris dans le prompt de chaque shell.
@@ -336,9 +348,10 @@ README.md
 
 ### Étape 3 — Isolation des identités et garde-fous
 
-Isolation par workspace : `AZURE_CONFIG_DIR` (az, azd), `KUBECONFIG`, `GH_CONFIG_DIR` ; modules
-PowerShell (Az, Graph, EXO, Teams, PnP) seulement là où c'est vérifié module par module.
-Confirmation des opérations destructrices dans un workspace PRD (aide, pas une garantie).
+1. Isolation par workspace (faite) : az, azd, gh, contexte kubectl ; Az PowerShell et CLI for
+   Microsoft 365 restent partagés (pas de dossier configurable), Graph / EXO / Teams / PnP sont par
+   terminal. À reprendre si Az.Accounts offre un jour un dossier de contexte configurable.
+2. Confirmation des opérations destructrices dans un workspace PRD (aide, pas une garantie).
 
 ### Étape 2 bis — Assistant IA (en cours)
 

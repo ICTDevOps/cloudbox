@@ -41,16 +41,22 @@ fi
 
 # Badge du workspace (panneaux du portail) : l'environnement est relu dans le fichier du
 # workspace à chaque prompt, il suit donc un changement DEV / ACC / PRD sans rouvrir le shell.
+# Les connexions (isolées ou partagées) sont fixées à l'ouverture du terminal : si le workspace a
+# changé de mode depuis (ou si le terminal date d'avant l'isolation), il faut le rouvrir.
 __cloudbox_workspace() {
     [[ -n ${CLOUDBOX_WORKSPACE:-} ]] || return 0
-    local env
-    env=$(jq -r '.env // empty' "$HOME/.cloudbox/workspaces/$CLOUDBOX_WORKSPACE.json" 2>/dev/null)
+    local env mode
+    IFS=$'\t' read -r env mode < <(jq -r '[.env // "", .identities // "isolated"] | @tsv' \
+        "$HOME/.cloudbox/workspaces/$CLOUDBOX_WORKSPACE.json" 2>/dev/null)
     case $env in
         prd) printf '\001\e[1;97;41m\002 PRD %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
         acc) printf '\001\e[1;30;43m\002 ACC %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
         dev) printf '\001\e[1;30;42m\002 DEV %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
         *)   printf '\001\e[7m\002 %s \001\e[0m\002 ' "$CLOUDBOX_WORKSPACE" ;;
     esac
+    if [[ -n $mode && $mode != "${CLOUDBOX_IDENTITIES:-shared}" ]]; then
+        printf '\001\e[1;31m\002⚠ rouvrir ce terminal / reopen this terminal (connexions / sign-ins)\001\e[0m\002 '
+    fi
 }
 
 # Contexte réel : abonnement par défaut d'az CLI (lu dans azureProfile.json, sans lancer az)
@@ -61,12 +67,16 @@ __cloudbox_az_ctx() {
     [[ -n $sub ]] && printf ' \001\e[94m\002az:%s\001\e[0m\002' "$sub"
 }
 
+# Contexte Kubernetes : celui du premier fichier de KUBECONFIG qui en définit un (règle de kubectl ;
+# un workspace isolé a son fichier devant ~/.kube/config)
 __cloudbox_kube_ctx() {
-    local cfg=${KUBECONFIG:-$HOME/.kube/config}
-    cfg=${cfg%%:*}
-    [[ -r $cfg ]] || return 0
-    local ctx
-    ctx=$(sed -n 's/^current-context:[[:space:]]*//p' "$cfg" 2>/dev/null | tr -d '"')
+    local cfg ctx files
+    IFS=: read -ra files <<< "${KUBECONFIG:-$HOME/.kube/config}"
+    for cfg in "${files[@]}"; do
+        [[ -r $cfg ]] || continue
+        ctx=$(sed -n 's/^current-context:[[:space:]]*//p' "$cfg" 2>/dev/null | tr -d '"' | head -n 1)
+        [[ -n $ctx ]] && break
+    done
     [[ -n $ctx ]] && printf ' \001\e[35m\002⎈ %s\001\e[0m\002' "$ctx"
 }
 

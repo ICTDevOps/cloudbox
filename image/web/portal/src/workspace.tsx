@@ -209,7 +209,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
             <code class="muted">{ws.folder}</code>
           </div>
         </div>
-        <ContextBar showShared />
+        <ContextBar wsId={ws.id} />
         <div class="ws-head-actions">
           <button type="button" class="button ws-settings-button" onClick={openSettings} title={m.workspace.settingsTitle}>
             <Icon name="gear" size={17} /> {m.common.settings}

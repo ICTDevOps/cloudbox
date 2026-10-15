@@ -100,6 +100,7 @@ const fr = {
     envHelp: 'Environnement cible ; PRD est signalé partout en rouge.',
     folderHelp: 'Dossier du workspace sous /home/dev, créé s\'il n\'existe pas.',
     panelsHelp: 'Panneaux ouverts à la première ouverture du workspace.',
+    identitiesHelp: 'Isolées : une connexion à un tenant dans ce workspace ne change pas les autres.',
     browse: 'Parcourir les dossiers',
   },
   folders: {
@@ -183,8 +184,14 @@ const fr = {
     namespace: 'Namespace',
     shared: 'partagé entre workspaces',
     sharedTitle:
-      'Les connexions az, Az PowerShell et kubectl ne sont pas encore isolées par workspace : ' +
-      'tous les workspaces utilisent ce même contexte.',
+      'Connexions partagées : az, azd, Az PowerShell, kubectl et gh sont communs à ce workspace, aux autres ' +
+      'workspaces en mode partagé, à VS Code et à docker exec. Modifiable dans les paramètres du workspace.',
+    isolated: 'connexions isolées',
+    isolatedTitle:
+      'az, azd, gh et le contexte kubectl sont propres à ce workspace : une connexion ici ne change rien ailleurs. ' +
+      'Restent communs : Az PowerShell (Connect-AzAccount), CLI for Microsoft 365, le namespace des contextes kubectl, le terminal de VS Code ' +
+      'et docker exec. Graph, Exchange, Teams et PnP se connectent terminal par terminal.',
+    toolShared: 'Connexion commune à tous les workspaces (non isolable)',
   },
   conn: {
     groupAzure: 'Azure',
@@ -192,6 +199,8 @@ const fr = {
     groupTools: 'Outils',
     azSub: 'Azure CLI : abonnement',
     subscriptionPlaceholder: 'abonnement',
+    identitiesIsolated: 'Connexions isolées : az, azd, gh et kubectl valent pour ce workspace seulement. Az PowerShell et CLI for Microsoft 365 restent communs à tous les workspaces.',
+    identitiesShared: 'Connexions partagées : une connexion ici vaut pour tous les workspaces en mode partagé.',
     perTerminal: 'par terminal',
     perTerminalTitle: 'Connexion propre à chaque session PowerShell : non visible depuis le portail',
     otherTenant: 'autre tenant',
@@ -219,6 +228,14 @@ const fr = {
     foot:
       "▶ saisit la commande dans le dernier terminal utilisé (PowerShell pour les cmdlets), sans l'exécuter. " +
       'Raccourci : Ctrl+Maj+K.',
+  },
+  identities: {
+    title: 'Connexions des terminaux',
+    isolated: 'Isolées',
+    isolatedHelp: 'az, azd, gh et contexte kubectl propres à ce workspace (recommandé).',
+    shared: 'Partagées',
+    sharedHelp: 'Communes avec les autres workspaces partagés, VS Code et docker exec.',
+    reopen: 'Les terminaux déjà ouverts gardent leur mode : fermez-les puis rouvrez-les après l’enregistrement.',
   },
   settings: {
     title: 'Paramètres du workspace',
@@ -352,6 +369,9 @@ const fr = {
     copied: 'Chemin copié',
     cd: (path: string) => `Saisir « cd ${path} » dans le terminal (sans l'exécuter)`,
     busy: (command: string) => `Commande en cours : ${command}`,
+    stale: 'connexions : terminal à rouvrir',
+    staleTitle: "Ce terminal a été ouvert avec d'autres connexions que celles du workspace (avant l'isolation ou " +
+      'avant un changement de mode) : fermez-le puis rouvrez-le.',
   },
   ai: {
     open: 'Assistant IA',
@@ -451,6 +471,7 @@ const en: Messages = {
     envHelp: 'Target environment; PRD is shown in red everywhere.',
     folderHelp: 'Workspace folder under /home/dev, created if it does not exist.',
     panelsHelp: 'Panels opened the first time the workspace is opened.',
+    identitiesHelp: 'Isolated: signing in to a tenant in this workspace does not change the others.',
     browse: 'Browse folders',
   },
   folders: {
@@ -538,8 +559,14 @@ const en: Messages = {
     namespace: 'Namespace',
     shared: 'shared across workspaces',
     sharedTitle:
-      'The az, Az PowerShell and kubectl sign-ins are not isolated per workspace yet: ' +
-      'all workspaces use this same context.',
+      'Shared sign-ins: az, azd, Az PowerShell, kubectl and gh are common to this workspace, the other shared ' +
+      'workspaces, VS Code and docker exec. Can be changed in the workspace settings.',
+    isolated: 'isolated sign-ins',
+    isolatedTitle:
+      'az, azd, gh and the kubectl context belong to this workspace: signing in here changes nothing elsewhere. ' +
+      'Still common: Az PowerShell (Connect-AzAccount), CLI for Microsoft 365, the namespace of kubectl contexts, the VS Code terminal ' +
+      'and docker exec. Graph, Exchange, Teams and PnP sign in terminal by terminal.',
+    toolShared: 'Sign-in common to all workspaces (cannot be isolated)',
   },
   conn: {
     groupAzure: 'Azure',
@@ -547,6 +574,8 @@ const en: Messages = {
     groupTools: 'Tools',
     azSub: 'Azure CLI: subscription',
     subscriptionPlaceholder: 'subscription',
+    identitiesIsolated: 'Isolated sign-ins: az, azd, gh and kubectl apply to this workspace only. Az PowerShell and CLI for Microsoft 365 stay common to all workspaces.',
+    identitiesShared: 'Shared sign-ins: signing in here applies to every shared workspace.',
     perTerminal: 'per terminal',
     perTerminalTitle: 'Sign-in specific to each PowerShell session: not visible from the portal',
     otherTenant: 'other tenant',
@@ -574,6 +603,14 @@ const en: Messages = {
     foot:
       '▶ types the command into the last terminal used (PowerShell for cmdlets), without running it. ' +
       'Shortcut: Ctrl+Shift+K.',
+  },
+  identities: {
+    title: 'Terminal sign-ins',
+    isolated: 'Isolated',
+    isolatedHelp: 'az, azd, gh and kubectl context belong to this workspace (recommended).',
+    shared: 'Shared',
+    sharedHelp: 'Common with the other shared workspaces, VS Code and docker exec.',
+    reopen: 'Terminals already open keep their mode: close and reopen them after saving.',
   },
   settings: {
     title: 'Workspace settings',
@@ -707,6 +744,9 @@ const en: Messages = {
     copied: 'Path copied',
     cd: (path) => `Type “cd ${path}” into the terminal (without running it)`,
     busy: (command) => `Running: ${command}`,
+    stale: 'sign-ins: reopen this terminal',
+    staleTitle: 'This terminal was opened with other sign-ins than the workspace ones (before isolation or before ' +
+      'a mode change): close it and open it again.',
   },
   ai: {
     open: 'AI assistant',

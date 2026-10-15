@@ -1,7 +1,7 @@
 // Accueil : présentation des outils (PowerShell, Bash, VS Code), astuces et versions de l'image.
 // Les workspaces (liste, création) sont dans la barre latérale, les connexions dans chaque workspace.
 import { useEffect, useState } from 'preact/hooks';
-import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type PanelKind, type ToolVersion } from './api';
+import { api, ENV_LABELS, ENVS, ID_RE, slugify, type Env, type IdentityMode, type PanelKind, type ToolVersion } from './api';
 import { useAssistantConfig } from './assistant';
 import { ContextBar } from './context';
 import { FolderPicker } from './folders';
@@ -10,6 +10,7 @@ import { Icon, type IconName } from './icons';
 import { getLang, t } from './i18n';
 import { PanelChoice } from './preferences';
 import { usePreferences } from './prefs';
+import { IdentityChoice } from './settings';
 import { useWorkspaces } from './store';
 
 // Ouvre la fenêtre de création de la barre latérale
@@ -36,6 +37,7 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
   const panels = (panelsChoice ?? prefs?.newWorkspace.panels ?? ['pwsh', 'code', 'bash'])
     .filter((k) => k !== 'assistant' || assistant?.enabled);
   const [folder, setFolder] = useState('');
+  const [identities, setIdentities] = useState<IdentityMode>('isolated');
   const [picker, setPicker] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -55,7 +57,7 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
     }
     setBusy(true);
     try {
-      await api.createWorkspace({ id: effectiveId, name: name.trim(), env, folder: folder.trim() || undefined, panels });
+      await api.createWorkspace({ id: effectiveId, name: name.trim(), env, folder: folder.trim() || undefined, panels, identities });
       onCreated(effectiveId);
     } catch (err) {
       setError((err as Error).message);
@@ -125,6 +127,14 @@ export function CreateWorkspace({ onCreated }: { onCreated: (id: string) => void
         <span class="row-help">{m.create.panelsHelp}</span>
         <fieldset aria-labelledby="create-panels-title">
           <PanelChoice name="create-panels" value={panels} onChange={setPanels} />
+        </fieldset>
+      </div>
+      <div class="form-row">
+        <span class="icon-tile"><Icon name="lock" size={20} /></span>
+        <span class="row-title" id="create-identities-title">{m.identities.title}</span>
+        <span class="row-help">{m.create.identitiesHelp}</span>
+        <fieldset aria-labelledby="create-identities-title">
+          <IdentityChoice name="create-identities" value={identities} onChange={setIdentities} />
         </fieldset>
       </div>
       {error && <p class="error" role="alert">{error}</p>}

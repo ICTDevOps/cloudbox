@@ -3,19 +3,20 @@
 // Écoute sur un socket UNIX ; Caddy est la seule porte (authentification, Host, Origin).
 //
 //   GET    /api/health
-//   GET    /api/context                               contexte réel : az CLI, Az PowerShell, Kubernetes, GitHub
+//   GET    /api/context                               contexte réel commun : az CLI, Az PowerShell, Kubernetes, GitHub
 //   GET    /api/folders?path=…                       sous-dossiers d'un dossier de /home/dev (sélecteur, sans les cachés)
 //   GET    /api/preferences                           préférences du portail (thème, nouveau workspace)
 //   PUT    /api/preferences                           mise à jour partielle { theme?, newWorkspace?: { env?, panels? },
 //                                                     terminal?: { fontFamily?, fontSize?, lineHeight?, cursorStyle?,
 //                                                     cursorBlink?, theme?, pathBar? } }
 //   GET    /api/workspaces                            liste (sans les dispositions)
-//   POST   /api/workspaces                            création { id, name, env, folder?, panels? }
+//   POST   /api/workspaces                            création { id, name, env, folder?, panels?, identities? }
 //   GET    /api/workspaces/:id                        workspace complet + sessions tmux actives
-//   GET    /api/workspaces/:id/terminals              dossier courant et commande en cours de ses terminaux
-//   PUT    /api/workspaces/:id                        mise à jour partielle { name?, env?, layout?, settings?, assistant? }
+//   GET    /api/workspaces/:id/context                contexte réel des terminaux du workspace (connexions isolées ou partagées)
+//   GET    /api/workspaces/:id/terminals              dossier courant, commande en cours et connexions de ses terminaux
+//   PUT    /api/workspaces/:id                        mise à jour partielle { name?, env?, layout?, settings?, assistant?, identities? }
 //   POST   /api/workspaces/:id/panels                 attribue un numéro de panneau terminal { n }
-//   DELETE /api/workspaces/:id                        suppression (le dossier de travail est conservé)
+//   DELETE /api/workspaces/:id                        suppression, connexions isolées comprises (le dossier de travail est conservé)
 //   DELETE /api/workspaces/:id/sessions/:session      fermeture d'une session tmux du workspace
 //   POST   /api/workspaces/:id/sessions/:session/input  saisie d'un texte dans la session { text },
 //                                                     sans Entrée : l'utilisateur relit et valide
@@ -28,8 +29,8 @@ import { chmod, mkdir, readdir, rm } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import {
-  HttpError, ID_RE, PREFERENCES_FILE, SOCKET, STATE_DIR, applyPreferences, azPowerShellContext, azureCliContext, checkEnv, checkId, checkInput, checkName,
-  checkPanels, checkSettings, githubContext, isRecord, killSession, kubernetesContext, loadPreferences, loadWorkspace, readBody, resolveFolder, run, send,
+  HttpError, ID_RE, PREFERENCES_FILE, SOCKET, STATE_DIR, applyPreferences, checkEnv, checkId, checkIdentities, checkInput, checkName,
+  checkPanels, checkSettings, cloudContext, identityDir, identityMode, isRecord, killSession, loadPreferences, loadWorkspace, readBody, resolveFolder, run, send,
   listFolders, sessionPattern, stateFile, summary, withLock, workspaceSessions, workspaceTerminals, writeJsonAtomic, type Workspace,
 } from './lib.ts';
 import { checkWorkspaceAssistant } from './assistant/config.ts';
@@ -63,16 +64,9 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       return send(res, 200, await listFolders(url.searchParams.get('path')));
     }
 
-    case 'GET /context': {
-      const [azureCli, azPowerShell, kubernetes, github] = await Promise.all([
-        azureCliContext(),
-        azPowerShellContext(),
-        kubernetesContext(),
-        githubContext(),
-      ]);
-      // Jusqu'à l'isolation par workspace (étape 3), ce contexte est commun à tous les workspaces
-      return send(res, 200, { azureCli, azPowerShell, kubernetes, github, sharedAcrossWorkspaces: true });
-    }
+    case 'GET /context':
+      // Connexions communes (accueil, VS Code, docker exec, workspaces en mode partagé)
+      return send(res, 200, await cloudContext());
 
     case 'GET /preferences':
       return send(res, 200, await loadPreferences());
@@ -126,6 +120,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
           folder: await resolveFolder(body.folder, id),
           nextPanel: 1,
           initialPanels: panels,
+          identities: body.identities === undefined ? 'isolated' : checkIdentities(body.identities),
           layout: null,
           created: now,
           updated: now,
@@ -141,9 +136,15 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       return send(res, 200, { ...ws, sessions: await workspaceSessions(ws.id) });
     }
 
+    case 'GET /workspaces/:/context': {
+      const ws = await loadWorkspace(parts[2]);
+      return send(res, 200, await cloudContext(ws));
+    }
+
     case 'GET /workspaces/:/terminals': {
       const ws = await loadWorkspace(parts[2]);
-      return send(res, 200, { terminals: await workspaceTerminals(ws.id) });
+      // identities : mode attendu ; un terminal d'un autre mode est à rouvrir (signalé par la barre de chemin)
+      return send(res, 200, { terminals: await workspaceTerminals(ws.id), identities: identityMode(ws) });
     }
 
     case 'PUT /workspaces/:': {
@@ -154,6 +155,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         if ('name' in body) w.name = checkName(body.name);
         if ('env' in body) w.env = checkEnv(body.env);
         if ('settings' in body) w.settings = checkSettings(body.settings);
+        // Les terminaux déjà ouverts gardent leur mode jusqu'à leur fermeture (signalé dans le portail)
+        if ('identities' in body) w.identities = checkIdentities(body.identities);
         if ('assistant' in body) {
           const a = checkWorkspaceAssistant(body.assistant);
           if (a) w.assistant = a;
@@ -194,6 +197,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       // n'est jamais supprimé
       abortWorkspace(ws.id);
       await deleteWorkspaceData(ws.id);
+      // Connexions isolées (jetons az, gh, azd, contexte Kubernetes) supprimées avec le workspace
+      await rm(identityDir(ws.id), { recursive: true, force: true });
       return send(res, 204);
     }
 

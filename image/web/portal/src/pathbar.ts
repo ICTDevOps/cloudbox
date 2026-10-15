@@ -107,6 +107,7 @@ export class PathBar {
   readonly element = document.createElement('div');
   private readonly crumbsEl = document.createElement('div');
   private readonly busyEl = document.createElement('span');
+  private readonly staleEl = document.createElement('span');
   private readonly copyEl = document.createElement('button');
   private readonly unsubscribe: () => void;
   private readonly unsubscribePrefs: () => void;
@@ -125,11 +126,12 @@ export class PathBar {
     this.element.setAttribute('role', 'navigation');
     this.crumbsEl.className = 'path-crumbs';
     this.busyEl.className = 'path-busy';
+    this.staleEl.className = 'path-stale';
     this.copyEl.type = 'button';
     this.copyEl.className = 'path-copy';
     this.copyEl.textContent = '⧉';
     this.copyEl.addEventListener('click', () => void this.copy());
-    this.element.append(this.crumbsEl, this.busyEl, this.copyEl);
+    this.element.append(this.crumbsEl, this.staleEl, this.busyEl, this.copyEl);
     this.applyPrefs();
     this.unsubscribePrefs = prefsStore.subscribe(() => {
       this.applyPrefs();
@@ -156,6 +158,9 @@ export class PathBar {
     this.copyEl.disabled = !state?.cwd;
     const idle = state?.idle ?? false;
     this.busyEl.textContent = state && !idle && state.command ? m.busy(state.command) : '';
+    // Terminal ouvert avant l'isolation ou avant un changement de mode des connexions
+    this.staleEl.textContent = state?.stale ? `⚠ ${m.stale}` : '';
+    this.staleEl.title = state?.stale ? m.staleTitle : '';
     const nodes: Node[] = [];
     if (state?.cwd) {
       const list = crumbs(state.cwd);

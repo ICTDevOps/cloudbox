@@ -40,7 +40,23 @@ folder=$(jq -r '.folder // empty' "$state" 2>/dev/null) || folder=
 folder=$(realpath -e -- "${folder:-$home}" 2>/dev/null) || folder=$home
 [[ $folder == "$home" || $folder == "$home"/* ]] || folder=$home
 
+# Connexions du workspace : isolées (défaut) ou partagées. En mode isolé, az, azd, gh et le contexte
+# Kubernetes ont leurs dossiers dans ~/.cloudbox/identities/<workspace>/ (mêmes variables que
+# identityEnv dans cloudbox-api). Le mode est fixé à l'ouverture de la session tmux : un terminal
+# déjà ouvert garde le sien (CLOUDBOX_IDENTITIES, lu par l'API et par le prompt).
+identities=$(jq -r '.identities // "isolated"' "$state" 2>/dev/null) || identities=isolated
+[[ $identities == shared ]] || identities=isolated
+envs=(-e "CLOUDBOX_WORKSPACE=$workspace" -e "CLOUDBOX_IDENTITIES=$identities")
+if [[ $identities == isolated ]]; then
+    ids=$home/.cloudbox/identities/$workspace
+    (umask 077 && mkdir -p "$ids/azure" "$ids/azd" "$ids/gh" "$ids/kube")
+    # kubeconfig du workspace : contexte courant et clusters ajoutés ici ; ~/.kube/config reste lu
+    [[ -s $ids/kube/config ]] || (umask 077 && printf 'apiVersion: v1\nkind: Config\n' > "$ids/kube/config")
+    envs+=(-e "AZURE_CONFIG_DIR=$ids/azure" -e "AZD_CONFIG_DIR=$ids/azd" -e "GH_CONFIG_DIR=$ids/gh"
+           -e "KUBECONFIG=$ids/kube/config:$home/.kube/config")
+fi
+
 # Session <workspace>_<shell>_<n> : « _ » est exclu des identifiants de workspace
 session="${workspace}_${shell}_${panel}"
 cd "$folder" || cd "$home"
-exec tmux new-session -A -s "$session" -c "$folder" -e "CLOUDBOX_WORKSPACE=$workspace" "$cmd"
+exec tmux new-session -A -s "$session" -c "$folder" "${envs[@]}" "$cmd"

@@ -135,7 +135,7 @@ function ProposalCard({ p, result, ws, dock, busy, onApprove, onReject }: {
   const m = t().assistant;
   const [command, setCommand] = useState(p.command);
   const [confirmPrd, setConfirmPrd] = useState(false);
-  const ctxState = useCloudContext();
+  const ctxState = useCloudContext(ws.id);
   const ctx = ctxState && ctxState !== 'error' ? ctxState : null;
   const pending = p.status === 'pending';
   const target = dock?.terminalFor(p.shell) ?? null;
@@ -204,7 +204,7 @@ function ProposalCard({ p, result, ws, dock, busy, onApprove, onReject }: {
 // Carte « Contexte du workspace » de l'assistant vide : ce que l'assistant joint à chaque échange
 function WorkspaceContextCard({ ws }: { ws: Workspace }) {
   const m = t().assistant;
-  const ctx = useCloudContext();
+  const ctx = useCloudContext(ws.id);
   const real = ctx && ctx !== 'error' ? ctx : null;
   const az = real?.azureCli;
   return (
@@ -217,7 +217,9 @@ function WorkspaceContextCard({ ws }: { ws: Workspace }) {
           <dt>{m.contextPath}</dt><dd><code>{ws.folder}</code></dd>
         </dl>
         <ul>
-          {real?.sharedAcrossWorkspaces && <li><Icon name="share" size={15} /> {t().context.shared}</li>}
+          {real && (real.identities === 'isolated'
+            ? <li><Icon name="lock" size={15} /> {t().context.isolated}</li>
+            : <li><Icon name="share" size={15} /> {t().context.shared}</li>)}
           <li><Icon name="context" size={15} /> {az ? m.contextAz(az.subscription) : m.contextNone}</li>
           {real?.kubernetes && <li><Icon name="kubernetes" size={15} /> {real.kubernetes.context}</li>}
         </ul>

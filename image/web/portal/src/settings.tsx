@@ -1,8 +1,9 @@
-// Paramètres d'un workspace : nom, environnement, valeurs de connexion (tenant, abonnement,
-// SharePoint, ClientId) reprises par le panneau Connexions, modèle propre de l'assistant.
+// Paramètres d'un workspace : nom, environnement, connexions des terminaux (isolées ou partagées),
+// valeurs de connexion (tenant, abonnement, SharePoint, ClientId) reprises par l'aide-mémoire, modèle
+// propre de l'assistant.
 // Validation définitive par cloudbox-api.
 import { useState } from 'preact/hooks';
-import { api, ENV_LABELS, ENVS, type Env, type ModelChoice, type Workspace, type WorkspaceSettings } from './api';
+import { api, ENV_LABELS, ENVS, type Env, type IdentityMode, type ModelChoice, type Workspace, type WorkspaceSettings } from './api';
 import { ModelPicker } from './ai-settings';
 import { useAssistantConfig } from './assistant';
 import { t } from './i18n';
@@ -21,6 +22,26 @@ function fields(): Field[] {
   ];
 }
 
+// Connexions des terminaux du workspace : isolées (défaut) ou partagées avec les autres workspaces
+export function IdentityChoice({ name, value, onChange }: { name: string; value: IdentityMode; onChange: (v: IdentityMode) => void }) {
+  const m = t().identities;
+  const options: { value: IdentityMode; icon: 'lock' | 'share'; title: string; help: string }[] = [
+    { value: 'isolated', icon: 'lock', title: m.isolated, help: m.isolatedHelp },
+    { value: 'shared', icon: 'share', title: m.shared, help: m.sharedHelp },
+  ];
+  return (
+    <div class="identity-choice">
+      {options.map((o) => (
+        <label class={`identity-option${value === o.value ? ' selected' : ''}`} key={o.value}>
+          <input type="radio" name={name} value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} />
+          <Icon name={o.icon} size={18} />
+          <span><strong>{o.title}</strong><small>{o.help}</small></span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
   ws: Workspace;
   onSaved: (ws: Workspace) => void;
@@ -30,6 +51,7 @@ export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
   const [env, setEnv] = useState<Env>(ws.env);
   const [values, setValues] = useState<WorkspaceSettings>({ ...ws.settings });
   const [model, setModel] = useState<ModelChoice | null>(ws.assistant ?? null);
+  const [identities, setIdentities] = useState<IdentityMode>(ws.identities ?? 'isolated');
   const assistant = useAssistantConfig();
   const aiProviders = assistant?.enabled ? assistant.providers.filter((p) => p.configured) : [];
   const [error, setError] = useState('');
@@ -48,8 +70,8 @@ export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
       if (v) settings[f.key] = v;
     }
     try {
-      const saved = await api.updateWorkspace(ws.id, { name: name.trim(), env, settings, assistant: model });
-      onSaved({ ...ws, name: saved.name, env: saved.env, settings, assistant: model ?? undefined });
+      const saved = await api.updateWorkspace(ws.id, { name: name.trim(), env, settings, assistant: model, identities });
+      onSaved({ ...ws, name: saved.name, env: saved.env, settings, assistant: model ?? undefined, identities });
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -78,6 +100,11 @@ export function WorkspaceSettingsForm({ ws, onSaved, onCancel }: {
             {ENV_LABELS[value]}
           </label>
         ))}
+      </fieldset>
+      <fieldset class="identities-field">
+        <legend>{m.identities.title}</legend>
+        <IdentityChoice name="settings-identities" value={identities} onChange={setIdentities} />
+        {identities !== (ws.identities ?? 'isolated') && <span class="field-help warn">{m.identities.reopen}</span>}
       </fieldset>
       <h3 class="settings-sub">{m.settings.connections}</h3>
       {FIELDS.map((f) => (
