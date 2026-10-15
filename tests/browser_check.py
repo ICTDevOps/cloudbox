@@ -79,8 +79,9 @@ with sync_playwright() as p:
     check("bandeau de bas de page", page.locator(".home-footer").inner_text() == "Olivier Malfroidt — VNET Consult — 2026")
     check("bouton « premier workspace »", page.locator(".home .intro button").count() == 1)
     check("barre latérale", page.locator(".sidebar .nav-new").count() == 1)
-    page.wait_for_selector(".context-bar .chip", timeout=15000)
-    check("barre de contexte réel", page.locator(".context-bar .chip").count() >= 3)
+    page.wait_for_selector(".context-bar .ctx-group", timeout=15000)
+    check("barre de contexte réel : Azure, M365, Kubernetes", page.locator(".context-bar .ctx-group").count() == 3)
+    check("accueil : pas de session par terminal", page.locator(".context-bar .svc[data-svc=graph]").count() == 0)
     page.screenshot(path=f"{OUT}/1-accueil.png", full_page=True)
 
     # --- Fenêtre Paramètres : thème, panneaux d'un nouveau workspace, assistant ---
@@ -128,7 +129,8 @@ with sync_playwright() as p:
     check("URL du workspace", page.url.endswith(f"#/w/{WS_ID}"), page.url)
     check("cadre PRD", page.locator(f"{A}.env-frame-prd").count() == 1)
     check("puce « connexions isolées »", page.locator(f"{A} .chip-isolated").count() == 1)
-    check("aucun outil signalé comme commun", page.locator(f"{A} .chip .chip-shared").count() == 0)
+    check("connexions du workspace : une pastille par service",
+          page.locator(f"{A} .context-bar .svc[data-svc]").count() == 8)
     check("workspace dans la barre latérale, actif", page.locator(f".sidebar a.nav-item.active[href='#/w/{WS_ID}']").count() == 1)
     page.wait_for_timeout(8000)  # chargement des terminaux et de VS Code
     check("trois panneaux par défaut", tab_titles(page) == ["Bash 2", "PowerShell 1", "VS Code"], tab_titles(page))

@@ -179,7 +179,12 @@ const fr = {
     account: 'Compte',
     cloud: 'Cloud',
     hintAz: 'Azure CLI : abonnement par défaut (az account show)',
-    hintAzPs: "Az PowerShell : contexte enregistré (Get-AzContext), distinct de celui d'Azure CLI",
+    hintAzPs: "Az PowerShell : distinct d'Azure CLI ; chaque terminal a son contexte (Get-AzContext), les nouveaux reprennent le contexte enregistré",
+    saved: 'Contexte enregistré',
+    sessionNote: "Session ouverte : la validité du jeton n'est pas vérifiée",
+    noSession: 'Aucun terminal PowerShell connecté (session propre à chaque terminal)',
+    common: 'Connexion commune à tous les workspaces',
+    openSheet: "Détail et commandes de connexion : ouvrir l'aide-mémoire",
     kubeContext: 'Contexte kubectl',
     namespace: 'Namespace',
     shared: 'partagé entre workspaces',
@@ -191,7 +196,6 @@ const fr = {
       'az, azd, Az PowerShell (Connect-AzAccount), gh et le contexte kubectl sont propres à ce workspace : une connexion ici ne change rien ailleurs. ' +
       'Restent communs : CLI for Microsoft 365, le namespace des contextes kubectl, le terminal de VS Code ' +
       'et docker exec. Graph, Exchange, Teams et PnP se connectent terminal par terminal.',
-    toolShared: 'Connexion commune à tous les workspaces (non isolable)',
   },
   conn: {
     groupAzure: 'Azure',
@@ -201,8 +205,6 @@ const fr = {
     subscriptionPlaceholder: 'abonnement',
     identitiesIsolated: 'Connexions isolées : az, azd, Az PowerShell, gh et kubectl valent pour ce workspace seulement. CLI for Microsoft 365 reste commun à tous les workspaces.',
     identitiesShared: 'Connexions partagées : une connexion ici vaut pour tous les workspaces en mode partagé.',
-    perTerminal: 'par terminal',
-    perTerminalTitle: 'Connexion propre à chaque session PowerShell : non visible depuis le portail',
     otherTenant: 'autre tenant',
     otherSubscription: 'autre abonnement',
     copy: 'Copier',
@@ -372,6 +374,7 @@ const fr = {
     stale: 'connexions : terminal à rouvrir',
     staleTitle: "Ce terminal a été ouvert avec d'autres connexions que celles du workspace (avant l'isolation ou " +
       'avant un changement de mode) : fermez-le puis rouvrez-le.',
+    connections: 'Sessions ouvertes dans ce terminal',
   },
   ai: {
     open: 'Assistant IA',
@@ -554,7 +557,12 @@ const en: Messages = {
     account: 'Account',
     cloud: 'Cloud',
     hintAz: 'Azure CLI: default subscription (az account show)',
-    hintAzPs: 'Az PowerShell: saved context (Get-AzContext), separate from the Azure CLI one',
+    hintAzPs: 'Az PowerShell: separate from Azure CLI; each terminal has its own context (Get-AzContext), new ones start from the saved context',
+    saved: 'Saved context',
+    sessionNote: 'Session open: the token validity is not checked',
+    noSession: 'No PowerShell terminal signed in (session specific to each terminal)',
+    common: 'Sign-in common to all workspaces',
+    openSheet: 'Details and sign-in commands: open the cheat sheet',
     kubeContext: 'kubectl context',
     namespace: 'Namespace',
     shared: 'shared across workspaces',
@@ -566,7 +574,6 @@ const en: Messages = {
       'az, azd, Az PowerShell (Connect-AzAccount), gh and the kubectl context belong to this workspace: signing in here changes nothing elsewhere. ' +
       'Still common: CLI for Microsoft 365, the namespace of kubectl contexts, the VS Code terminal ' +
       'and docker exec. Graph, Exchange, Teams and PnP sign in terminal by terminal.',
-    toolShared: 'Sign-in common to all workspaces (cannot be isolated)',
   },
   conn: {
     groupAzure: 'Azure',
@@ -576,8 +583,6 @@ const en: Messages = {
     subscriptionPlaceholder: 'subscription',
     identitiesIsolated: 'Isolated sign-ins: az, azd, Az PowerShell, gh and kubectl apply to this workspace only. CLI for Microsoft 365 stays common to all workspaces.',
     identitiesShared: 'Shared sign-ins: signing in here applies to every shared workspace.',
-    perTerminal: 'per terminal',
-    perTerminalTitle: 'Sign-in specific to each PowerShell session: not visible from the portal',
     otherTenant: 'other tenant',
     otherSubscription: 'other subscription',
     copy: 'Copy',
@@ -747,6 +752,7 @@ const en: Messages = {
     stale: 'sign-ins: reopen this terminal',
     staleTitle: 'This terminal was opened with other sign-ins than the workspace ones (before isolation or before ' +
       'a mode change): close it and open it again.',
+    connections: 'Sessions open in this terminal',
   },
   ai: {
     open: 'AI assistant',

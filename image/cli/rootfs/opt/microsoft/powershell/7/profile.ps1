@@ -39,6 +39,78 @@ if ($env:CLOUDBOX_AZPS_HOME -and -not (Get-Module Az.Accounts)) {
     Remove-Variable cloudboxHome
 }
 
+# Microsoft Teams n'expose pas son état de connexion (pas d'équivalent de Get-MgContext) : les deux
+# cmdlets sont enveloppées pour retenir le compte connecté. Paramètres recopiés de la cmdlet d'origine
+# (complétion conservée), module chargé seulement à l'usage.
+function Get-CloudboxProxyParameters([string]$Command) {
+    $dict = [System.Management.Automation.RuntimeDefinedParameterDictionary]::new()
+    $cmd = Get-Command $Command -CommandType Cmdlet -ErrorAction SilentlyContinue
+    if (-not $cmd) { return $dict }
+    $common = [System.Management.Automation.Cmdlet]::CommonParameters + [System.Management.Automation.Cmdlet]::OptionalCommonParameters
+    foreach ($p in $cmd.Parameters.Values) {
+        if ($p.Name -in $common) { continue }
+        $dict.Add($p.Name, [System.Management.Automation.RuntimeDefinedParameter]::new($p.Name, $p.ParameterType, $p.Attributes))
+    }
+    $dict
+}
+
+function Connect-MicrosoftTeams {
+    [CmdletBinding()]
+    param()
+    dynamicparam { Get-CloudboxProxyParameters 'MicrosoftTeams\Connect-MicrosoftTeams' }
+    end {
+        $result = MicrosoftTeams\Connect-MicrosoftTeams @PSBoundParameters
+        if ($result) {
+            $account = $result.Account
+            $global:CloudboxTeams = @{ user = if ($account.Id) { "$($account.Id)" } else { "$account" }; tenantId = "$($result.TenantId)" }
+        }
+        $result
+    }
+}
+
+function Disconnect-MicrosoftTeams {
+    [CmdletBinding()]
+    param()
+    dynamicparam { Get-CloudboxProxyParameters 'MicrosoftTeams\Disconnect-MicrosoftTeams' }
+    end {
+        MicrosoftTeams\Disconnect-MicrosoftTeams @PSBoundParameters
+        $global:CloudboxTeams = $null
+    }
+}
+
+# Connexions de ce terminal (Az PowerShell, Graph, Exchange, Teams, PnP : elles vivent dans le processus),
+# publiées pour le portail dans l'option tmux du panneau @cloudbox_conn (JSON). Seuls les modules déjà
+# chargés sont interrogés, sans appel réseau : « connecté » veut dire « session ouverte », pas « jeton valide ».
+function Get-CloudboxConnections {
+    $conn = [ordered]@{}
+    $cut = { param($v) $s = "$v"; if ($s.Length -gt 200) { $s.Substring(0, 200) } else { $s } }
+    if (Get-Module Az.Accounts) {
+        $ctx = Get-AzContext -ErrorAction SilentlyContinue
+        if ($ctx -and $ctx.Account) {
+            $conn.azps = [ordered]@{ user = & $cut $ctx.Account.Id; tenantId = & $cut $ctx.Tenant.Id
+                subscription = & $cut $ctx.Subscription.Name; subscriptionId = & $cut $ctx.Subscription.Id }
+        }
+    }
+    if (Get-Module Microsoft.Graph.Authentication) {
+        $mg = Get-MgContext -ErrorAction SilentlyContinue
+        if ($mg) {
+            # Connexion d'application (certificat, secret) : pas de compte, le nom de l'application
+            $conn.graph = [ordered]@{ user = & $cut $(if ($mg.Account) { $mg.Account } else { $mg.AppName }); tenantId = & $cut $mg.TenantId }
+        }
+    }
+    if (Get-Module ExchangeOnlineManagement) {
+        $exo = Get-ConnectionInformation -ErrorAction SilentlyContinue | Where-Object State -eq 'Connected' | Select-Object -First 1
+        if ($exo) { $conn.exo = [ordered]@{ user = & $cut $exo.UserPrincipalName; tenantId = & $cut $exo.TenantID } }
+    }
+    if ($global:CloudboxTeams) { $conn.teams = [ordered]@{ user = & $cut $global:CloudboxTeams.user; tenantId = & $cut $global:CloudboxTeams.tenantId } }
+    if (Get-Module PnP.PowerShell) {
+        # Sans connexion, Get-PnPConnection lève une erreur
+        $pnp = try { Get-PnPConnection -ErrorAction Stop } catch { $null }
+        if ($pnp) { $conn.pnp = [ordered]@{ url = & $cut $pnp.Url } }
+    }
+    $conn
+}
+
 # Prompt : workspace, dossier, branche git, contexte réel (az CLI, Az PowerShell, Kubernetes)
 function prompt {
     $ok = $?
@@ -48,6 +120,14 @@ function prompt {
     if ($env:TMUX_PANE) {
         $global:CloudboxPromptSeq = 1 + [int]$global:CloudboxPromptSeq
         tmux set-option -p -t $env:TMUX_PANE '@cloudbox_prompt' "$($global:CloudboxPromptSeq):$(if ($ok) { 0 } else { 1 })" 2>$null
+        # Connexions du terminal, réécrites seulement quand elles changent
+        $conn = try { Get-CloudboxConnections | ConvertTo-Json -Compress -Depth 3 } catch { '{}' }
+        if ($conn -ne $global:CloudboxConnPublished) {
+            if ($conn -ne '{}' -or $global:CloudboxConnPublished) {
+                tmux set-option -p -t $env:TMUX_PANE '@cloudbox_conn' $conn 2>$null
+            }
+            $global:CloudboxConnPublished = $conn
+        }
     }
     # Set-Location ne change pas le dossier du processus : on l'aligne, pour que tmux le voie
     # (barre de chemin du portail, découpage d'un panneau tmux dans le même dossier)

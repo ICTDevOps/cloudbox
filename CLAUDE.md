@@ -192,6 +192,15 @@ restent sur la configuration commune. Le mode est fixé à l'ouverture de la ses
 `CLOUDBOX_IDENTITIES`) : un terminal d'un autre mode est signalé (prompt, barre de chemin) et
 l'assistant refuse d'y exécuter une commande. `GET /api/workspaces/:id/context` lit le contexte du
 workspace ; la suppression du workspace supprime son dossier d'identités.
+**Connexions réelles** (à droite de la barre d'outils du workspace, `context.tsx`, état calculé dans `connstatus.ts`, repris par l'aide-mémoire
+et la barre de chemin) : groupes Azure (az, Az PS), M365 (Graph, EXO, Teams, PnP, m365) et Kubernetes,
+une pastille par service (vert : session ouverte, gris : non, orange : autre tenant ou abonnement que le
+déclaré). Graph / EXO / Teams / PnP et le contexte Az PowerShell du processus sont publiés par le prompt
+de chaque terminal PowerShell (`Get-CloudboxConnections` dans `profile.ps1`, option tmux de panneau
+`@cloudbox_conn` en JSON, modules déjà chargés seulement, sans réseau ; Teams n'ayant pas de cmdlet
+d'état, `Connect-/Disconnect-MicrosoftTeams` sont enveloppées) et lus par `workspaceTerminals`
+(`api/lib.ts`, champ `terminals` du contexte). CLI for Microsoft 365 : `~/.cli-m365-connection.json`
+(jamais ses jetons). « Connecté » = session présente, pas jeton valide.
 L'environnement déclaré (DEV / ACC / PRD) est très visible, mais **le contexte affiché
 (abonnement Azure, cluster Kubernetes) est toujours lu depuis l'état réel**, jamais déclaré,
 y compris dans le prompt de chaque shell.

@@ -1,9 +1,12 @@
 // Barre de contexte : ce que les outils utilisent réellement (lu par cloudbox-api dans les fichiers
-// de configuration), jamais une valeur déclarée. Contexte commun (accueil) ou d'un workspace (ses
-// connexions isolées). Une interrogation toutes les 15 secondes par contexte, partagée par tous les
-// composants abonnés (barres, aide-mémoire, assistant), tant qu'il y en a un.
+// de configuration et dans les sessions publiées par chaque terminal PowerShell), jamais une valeur
+// déclarée. Groupes Azure, Microsoft 365 et Kubernetes, une pastille par service. Contexte commun
+// (accueil) ou d'un workspace (ses connexions isolées). Une interrogation toutes les 15 secondes par
+// contexte, partagée par tous les composants abonnés (barres, aide-mémoire, assistant), tant qu'il y en a un.
 import { useEffect, useState } from 'preact/hooks';
-import { api, type AzureContext, type CloudContext, type ContextTool } from './api';
+import type { ComponentChildren } from 'preact';
+import { api, type CloudContext, type WorkspaceSettings } from './api';
+import { serviceStatuses, type ServiceStatus } from './connstatus';
 import { t } from './i18n';
 import { Icon, type IconName } from './icons';
 
@@ -58,53 +61,61 @@ export function useCloudContext(wsId = ''): ContextState {
   return ctx;
 }
 
-function AzureChip({ label, icon, ctx, hint, shared }: { label: string; icon: IconName; ctx: AzureContext | null; hint: string; shared: boolean }) {
-  const m = t().context;
-  const sharedMark = shared && <Icon name="share" size={13} class="chip-shared" />;
-  const sharedHint = shared ? m.toolShared : '';
-  if (!ctx) {
-    return (
-      <span class="chip chip-off" title={[hint, sharedHint].filter(Boolean).join('\n')}>
-        <Icon name={icon} size={15} /><span class="chip-label">{label}</span> {m.notConnected}{sharedMark}
-      </span>
-    );
-  }
-  // Séparateur : espace avant les deux-points en français
-  const sep = document.documentElement.lang === 'fr' ? ' : ' : ': ';
-  const title = [`${m.subscription}${sep}${ctx.subscription} (${ctx.subscriptionId})`, `${m.tenant}${sep}${ctx.tenantId}`,
-    `${m.account}${sep}${ctx.user}`, ctx.cloud && `${m.cloud}${sep}${ctx.cloud}`, hint, sharedHint].filter(Boolean).join('\n');
+function ServiceItem({ st, showValue }: { st: ServiceStatus; showValue: boolean }) {
+  const count = st.terminals.length > 1 ? ` ×${st.terminals.length}` : '';
   return (
-    <span class="chip" title={title}>
-      <Icon name={icon} size={15} /><span class="chip-label">{label}</span> {ctx.subscription}
-      {ctx.user && <span class="chip-muted"> · {ctx.user}</span>}{sharedMark}
+    <span class={`svc ${st.state}`} data-svc={st.id} title={st.detail.join('\n')}>
+      <span class="svc-dot" aria-hidden="true" />
+      <span class="svc-label">{st.label}</span>
+      {showValue && st.value && <span class="svc-value">{st.value}</span>}
+      {count && <span class="svc-count">{count}</span>}
+      <span class="sr-only"> ({st.state === 'off' ? t().context.notConnected : st.text})</span>
     </span>
   );
 }
 
-// wsId : contexte des terminaux de ce workspace (connexions isolées ou partagées) ; sans : contexte commun
-export function ContextBar({ wsId }: { wsId?: string }) {
+// Groupe de services ; un clic ouvre l'aide-mémoire (détail et commandes de connexion) quand il existe
+// Nom du groupe en infobulle : l'icône suffit à l'écran, la place va aux services
+function Group({ name, icon, onOpen, hint, children }: { name: string; icon: IconName; onOpen?: () => void; hint: string; children: ComponentChildren }) {
+  const content = <><Icon name={icon} size={15} /><span class="sr-only">{name}</span>{children}</>;
+  const title = [name, hint].filter(Boolean).join(' — ');
+  return onOpen
+    ? <button type="button" class="ctx-group" onClick={onOpen} title={title}>{content}</button>
+    : <span class="ctx-group" title={name}>{content}</span>;
+}
+
+// wsId : contexte des terminaux de ce workspace (connexions isolées ou partagées, sessions de chaque
+// terminal PowerShell) ; sans : contexte commun. onOpen : ouvre l'aide-mémoire des connexions.
+export function ContextBar({ wsId, settings, onOpen }: { wsId?: string; settings?: WorkspaceSettings; onOpen?: () => void }) {
   const ctx = useCloudContext(wsId);
   const m = t().context;
   if (ctx === null) return <div class="context-bar muted">{m.loading}</div>;
   if (ctx === 'error') return <div class="context-bar muted">{m.unavailable}</div>;
   const sep = document.documentElement.lang === 'fr' ? ' : ' : ': ';
-  // Outil partagé signalé seulement dans un workspace isolé (en mode partagé, la puce dit tout)
-  const marked = (tool: ContextTool) => Boolean(wsId) && ctx.identities === 'isolated' && ctx.shared.includes(tool);
+  const services = serviceStatuses(ctx, settings, Boolean(wsId));
+  const hint = onOpen ? m.openSheet : '';
+  // Az PS : abonnement affiché seulement s'il diffère de celui d'az (sinon en infobulle)
+  const azValue = services.find((s) => s.id === 'az')?.value;
+  const showValue = (st: ServiceStatus) => st.id === 'az' || (st.id === 'azps' && st.value !== azValue);
+  const group = (g: 'azure' | 'm365') =>
+    services.filter((s) => s.group === g).map((s) => <ServiceItem key={s.id} st={s} showValue={showValue(s)} />);
   return (
     <div class="context-bar" aria-label={m.label}>
-      <AzureChip label="az" icon="azure" ctx={ctx.azureCli} hint={m.hintAz} shared={marked('azureCli')} />
-      <AzureChip label="Az PS" icon="pwsh" ctx={ctx.azPowerShell} hint={m.hintAzPs} shared={marked('azPowerShell')} />
-      {ctx.kubernetes ? (
-        <span class="chip" title={`${m.kubeContext}${sep}${ctx.kubernetes.context}\n${m.namespace}${sep}${ctx.kubernetes.namespace}`}>
-          <Icon name="kubernetes" size={15} /> {ctx.kubernetes.context}
-          <span class="chip-muted"> · {ctx.kubernetes.namespace}</span>
-        </span>
-      ) : (
-        <span class="chip chip-off"><span class="chip-dot" aria-hidden="true" /> {m.noContext}</span>
-      )}
+      <Group name="Azure" icon="azure" onOpen={onOpen} hint={hint}>{group('azure')}</Group>
+      <Group name="Microsoft 365" icon="m365" onOpen={onOpen} hint={hint}>{group('m365')}</Group>
+      <Group name="Kubernetes" icon="kubernetes" onOpen={onOpen} hint={hint}>
+        {ctx.kubernetes ? (
+          <span class="svc on" data-svc="kube" title={`${m.kubeContext}${sep}${ctx.kubernetes.context}\n${m.namespace}${sep}${ctx.kubernetes.namespace}`}>
+            <span class="svc-label">{ctx.kubernetes.context}</span>
+            <span class="svc-value">{ctx.kubernetes.namespace}</span>
+          </span>
+        ) : (
+          <span class="svc off" data-svc="kube"><span class="svc-dot" aria-hidden="true" /> {m.noContext}</span>
+        )}
+      </Group>
       {wsId && (ctx.identities === 'isolated' ? (
-        <span class="chip chip-isolated" title={m.isolatedTitle}>
-          <Icon name="lock" size={15} /> {m.isolated}
+        <span class="ctx-mode chip-isolated" title={`${m.isolated}\n${m.isolatedTitle}`} aria-label={m.isolated}>
+          <Icon name="lock" size={15} />
         </span>
       ) : (
         <span class="chip chip-warn" title={m.sharedTitle}>

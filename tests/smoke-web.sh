@@ -228,6 +228,18 @@ docker exec "$NAME" bash -c "printf '{\"DefaultContextKey\":\"k\",\"EnvironmentT
 expect "contexte Az PowerShell du workspace" "azps-client null" "$(ctxq client .azPowerShell.subscription) $(ctxq client-prd .azPowerShell)"
 out=$(probe "$BASE/term/pwsh/ws?arg=client~14" "$TOKEN" "$BASE" '"azps=" + (Get-AzContext).Subscription.Name')
 grep -q 'azps=azps-client' <<<"$out" && pass "nouveau terminal PowerShell : contexte Az du workspace" || fail "Get-AzContext client : $(tail -c 300 <<<"$out")"
+# Connexions publiées par le prompt PowerShell (option tmux @cloudbox_conn) : contexte Az PowerShell du
+# processus, Teams retenu par l'enveloppe de Connect-MicrosoftTeams (Graph, EXO, PnP : sans compte de test)
+probe "$BASE/term/pwsh/ws?arg=client~14" "$TOKEN" "$BASE" '$global:CloudboxTeams = @{ user = "t@x"; tenantId = "t" }' >/dev/null
+sleep 1
+expect "connexions publiées par un terminal PowerShell" "azps-client t@x" "$(ctxq client '.terminals[] | select(.session == "client_pwsh_14") | "\(.connections.azps.subscription) \(.connections.teams.user)"')"
+expect "GET terminaux : connexions du terminal" "azps-client" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client/terminals" | docker exec -i "$NAME" jq -r '.terminals[] | select(.session == "client_pwsh_14") | .connections.azps.subscription')"
+out=$(probe "$BASE/term/pwsh/ws?arg=client~14" "$TOKEN" "$BASE" '"teams=" + (Get-Command Connect-MicrosoftTeams).CommandType + "," + (Get-Command Connect-MicrosoftTeams).Parameters.ContainsKey("TenantId")')
+grep -q 'teams=Function,True' <<<"$out" && pass "Connect-MicrosoftTeams enveloppée, paramètres conservés" || fail "enveloppe Teams : $(tail -c 300 <<<"$out")"
+# CLI for Microsoft 365 : connexion commune lue dans son fichier, jetons jamais renvoyés
+docker exec "$NAME" bash -c "printf '{\"active\":true,\"identityName\":\"m@x\",\"identityTenantId\":\"t\",\"cloudType\":\"Public\",\"accessTokens\":{\"g\":{\"accessToken\":\"secret\"}}}' > ~/.cli-m365-connection.json"
+expect "CLI for Microsoft 365 : connexion commune, sans jeton" "m@x cloud,tenantId,user" "$(ctxq client '"\(.m365.user) \(.m365 | keys | join(","))"')"
+docker exec "$NAME" rm -f /home/dev/.cli-m365-connection.json
 out=$(probe "$BASE/term/pwsh/ws?arg=client-prd~14" "$TOKEN" "$BASE" '"azps=[" + (Get-AzContext).Subscription.Name + "]"')
 grep -q 'azps=\[\]' <<<"$out" && pass "terminal PowerShell d'un autre workspace : aucun contexte Az" || fail "Get-AzContext client-prd : $(tail -c 300 <<<"$out")"
 docker exec "$NAME" tmux kill-session -t '=client_pwsh_14'

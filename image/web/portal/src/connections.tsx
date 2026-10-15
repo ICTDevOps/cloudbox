@@ -2,6 +2,7 @@
 // panneau « Connexions » du workspace (copier, insérer dans un terminal) et aide-mémoire de l'accueil.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type CloudContext, type Workspace, type WorkspaceSettings } from './api';
+import { serviceStatuses, type ServiceId } from './connstatus';
 import { useCloudContext } from './context';
 import type { DockHandle, TerminalRef } from './dock';
 import { t } from './i18n';
@@ -9,7 +10,7 @@ import { Icon } from './icons';
 
 // 'pwsh' : cmdlet PowerShell, insérable seulement dans un terminal PowerShell
 type CommandShell = 'any' | 'pwsh';
-type StatusKey = 'azureCli' | 'azPowerShell' | 'kubernetes' | 'github' | 'session';
+type StatusKey = ServiceId | 'kubernetes' | 'github';
 
 export interface ConnectionCommand {
   id: string;
@@ -21,8 +22,6 @@ export interface ConnectionCommand {
   missing: string[];
   status?: StatusKey;
 }
-
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // URL SharePoint déduite d'un tenant <nom>.onmicrosoft.com
 function sharepointUrl(s: WorkspaceSettings): string | undefined {
@@ -46,61 +45,48 @@ export function connectionCommands(s: WorkspaceSettings = {}): ConnectionCommand
   const spo = sharepointUrl(s);
   const [azure, m365, tools] = [m.groupAzure, m.groupM365, m.groupTools];
 
-  add({ id: 'az', group: azure, label: 'Azure CLI', shell: 'any', status: 'azureCli' },
+  add({ id: 'az', group: azure, label: 'Azure CLI', shell: 'any', status: 'az' },
     ['az login --use-device-code', tenant && `--tenant ${tenant}`]);
-  add({ id: 'az-sub', group: azure, label: m.azSub, shell: 'any', status: 'azureCli' },
+  add({ id: 'az-sub', group: azure, label: m.azSub, shell: 'any', status: 'az' },
     ['az account set --subscription', s.subscription ?? `<${m.subscriptionPlaceholder}>`]);
   add({ id: 'azd', group: azure, label: 'Azure Developer CLI', shell: 'any' },
     ['azd auth login --use-device-code', tenant && `--tenant-id ${tenant}`]);
-  add({ id: 'azps', group: azure, label: 'Az PowerShell', shell: 'pwsh', status: 'azPowerShell' },
+  add({ id: 'azps', group: azure, label: 'Az PowerShell', shell: 'pwsh', status: 'azps' },
     ['Connect-AzAccount -UseDeviceAuthentication', tenant && `-Tenant ${tenant}`, s.subscription && `-Subscription ${s.subscription}`]);
   add({ id: 'aks', group: azure, label: 'AKS (Entra ID)', shell: 'any', status: 'kubernetes' },
     ['az aks get-credentials -g <rg> -n <cluster> && kubelogin convert-kubeconfig -l azurecli']);
 
-  add({ id: 'graph', group: m365, label: 'Microsoft Graph', shell: 'pwsh', status: 'session' },
+  add({ id: 'graph', group: m365, label: 'Microsoft Graph', shell: 'pwsh', status: 'graph' },
     ['Connect-MgGraph -UseDeviceCode -Scopes "User.Read.All"', tenant && `-TenantId ${tenant}`]);
-  add({ id: 'exo', group: m365, label: 'Exchange Online', shell: 'pwsh', status: 'session' },
+  add({ id: 'exo', group: m365, label: 'Exchange Online', shell: 'pwsh', status: 'exo' },
     ['Connect-ExchangeOnline -Device']);
-  add({ id: 'teams', group: m365, label: 'Microsoft Teams', shell: 'pwsh', status: 'session' },
+  add({ id: 'teams', group: m365, label: 'Microsoft Teams', shell: 'pwsh', status: 'teams' },
     ['Connect-MicrosoftTeams -UseDeviceAuthentication', tenant && `-TenantId ${tenant}`]);
-  add({ id: 'pnp', group: m365, label: 'PnP PowerShell', shell: 'pwsh', status: 'session' },
+  add({ id: 'pnp', group: m365, label: 'PnP PowerShell', shell: 'pwsh', status: 'pnp' },
     ['Connect-PnPOnline -Url', spo ?? 'https://<tenant>.sharepoint.com', '-DeviceLogin -ClientId', s.clientId ?? '<app-id>',
       tenant && `-Tenant ${tenant}`]);
-  add({ id: 'm365', group: m365, label: 'CLI for Microsoft 365', shell: 'any' },
+  add({ id: 'm365', group: m365, label: 'CLI for Microsoft 365', shell: 'any', status: 'm365' },
     ['m365 login --authType deviceCode', tenant && `--tenant ${tenant}`, s.clientId && `--appId ${s.clientId}`]);
 
   add({ id: 'gh', group: tools, label: 'GitHub CLI', shell: 'any', status: 'github' }, ['gh auth login']);
   return cmds;
 }
 
-type Status = { state: 'on' | 'off' | 'warn' | 'info'; text: string; title?: string };
+type Status = { state: 'on' | 'off' | 'warn'; text: string; title?: string };
 
 function statusOf(key: StatusKey | undefined, ctx: CloudContext | null, s: WorkspaceSettings): Status | null {
   if (!key || !ctx) return null;
-  const m = t().conn;
   const c = t().context;
-  if (key === 'session') {
-    return { state: 'info', text: m.perTerminal, title: m.perTerminalTitle };
-  }
-  if (key === 'azureCli' || key === 'azPowerShell') {
-    const az = ctx[key];
-    if (!az) return { state: 'off', text: c.notConnected };
-    const title = `${az.user}\n${az.subscription} (${az.subscriptionId})\nTenant ${az.tenantId}`;
-    // Le tenant du workspace n'est comparable que sous forme de GUID
-    if (s.tenant && GUID_RE.test(s.tenant) && s.tenant.toLowerCase() !== az.tenantId.toLowerCase()) {
-      return { state: 'warn', text: m.otherTenant, title };
-    }
-    if (s.subscription && s.subscription.toLowerCase() !== az.subscriptionId.toLowerCase()) {
-      return { state: 'warn', text: m.otherSubscription, title };
-    }
-    return { state: 'on', text: az.subscription || az.user, title };
-  }
   if (key === 'kubernetes') {
     return ctx.kubernetes ? { state: 'on', text: ctx.kubernetes.context } : { state: 'off', text: c.noContext };
   }
-  return ctx.github
-    ? { state: 'on', text: ctx.github.user || ctx.github.host, title: ctx.github.host }
-    : { state: 'off', text: c.notConnected };
+  if (key === 'github') {
+    return ctx.github
+      ? { state: 'on', text: ctx.github.user || ctx.github.host, title: ctx.github.host }
+      : { state: 'off', text: c.notConnected };
+  }
+  const st = serviceStatuses(ctx, s).find((x) => x.id === key);
+  return st ? { state: st.state, text: st.text, title: st.detail.join('\n') } : null;
 }
 
 export function CopyButton({ text }: { text: string }) {

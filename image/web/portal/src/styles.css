@@ -289,15 +289,34 @@ h2 { font-size: 1.05rem; }
   white-space: nowrap; max-width: 28rem; overflow: hidden; text-overflow: ellipsis;
 }
 .chip .icon { color: var(--link); }
-.chip-label { font-weight: 700; color: var(--link); }
-.chip-muted { color: var(--muted); }
-.chip-off { color: var(--muted); }
 .chip-warn { background: var(--warn-bg); color: var(--warn-text); border-color: color-mix(in srgb, var(--warn-text) 35%, transparent); font-weight: 600; }
 .chip-warn .icon { color: var(--warn-text); }
-/* Connexions isolées du workspace ; outil resté commun (Az PowerShell) marqué dans sa puce */
-.chip-isolated { color: var(--dev); border-color: color-mix(in srgb, var(--dev) 45%, transparent); font-weight: 600; }
+/* Groupes de connexions (Azure, M365, Kubernetes) : une pastille par service, verte si une session est
+   ouverte, grise sinon, orange si le tenant ou l'abonnement diffère du déclaré */
+.ctx-group {
+  display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0;
+  padding: 0.25rem 0.75rem; font: inherit; color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  white-space: nowrap; overflow: hidden;
+}
+button.ctx-group { cursor: pointer; }
+button.ctx-group:hover { border-color: var(--link); }
+.ctx-group > .icon { color: var(--link); flex: none; }
+.svc { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 0; }
+.svc-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none; background: var(--muted); opacity: 0.6; }
+.svc.on .svc-dot { background: var(--dev); opacity: 1; }
+.svc.warn .svc-dot { background: var(--warn-text); opacity: 1; }
+.svc.off { color: var(--muted); }
+.svc.warn { color: var(--warn-text); font-weight: 600; }
+.svc-label { font-weight: 600; }
+.svc-value { color: var(--muted); max-width: 10rem; overflow: hidden; text-overflow: ellipsis; }
+.svc-value::before { content: "· "; }
+.svc-count { color: var(--muted); font-size: 0.8em; }
+/* Connexions isolées du workspace : cadenas (le détail est dans l'infobulle) */
+.ctx-mode { display: inline-flex; align-items: center; padding: 0.3rem; border-radius: 50%; cursor: help; }
+.chip-isolated { color: var(--dev); border: 1px solid color-mix(in srgb, var(--dev) 45%, transparent); }
 .chip-isolated .icon { color: var(--dev); }
-.chip .icon.chip-shared { color: var(--warn-text); margin-left: 0.15rem; }
 
 /* Badges d'environnement */
 .env-badge {
@@ -463,13 +482,13 @@ kbd {
 .ws-title { display: flex; align-items: center; gap: 0.85rem; min-width: 0; }
 .ws-title h1 { font-size: 1.2rem; line-height: 1.2; }
 .ws-title code { font-size: 0.8rem; background: none; padding: 0; }
-.chip-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent); display: inline-block; }
 .ws-head-actions { margin-left: auto; display: flex; gap: 0.5rem; flex: none; }
 .workspace .topbar { flex-wrap: nowrap; }
 .workspace .topbar .ws-title { flex: none; max-width: 30%; }
 .workspace .topbar .ws-title > div { min-width: 0; }
 .workspace .topbar .ws-title h1, .workspace .topbar .ws-title code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace .topbar .context-bar { flex: 1; min-width: 0; }
+/* Connexions réelles : à droite de la barre d'outils du workspace */
+.ws-toolbar .context-bar { margin-left: auto; justify-content: flex-end; min-width: 0; }
 @media (max-width: 1100px) {
   .workspace .topbar { flex-wrap: wrap; }
   .workspace .topbar .ws-title { max-width: none; }
@@ -630,6 +649,13 @@ kbd {
 .path-crumbs button:disabled { cursor: default; }
 .path-crumbs .outside { color: var(--muted); }
 .path-crumbs .last { font-weight: 700; }
+/* Sessions ouvertes dans le terminal (Graph, EXO…) */
+.path-conn { flex: none; display: flex; gap: 0.25rem; }
+.path-conn:empty { display: none; }
+.path-svc {
+  font-size: 0.68rem; font-weight: 600; padding: 0 0.35rem; border-radius: 4px; cursor: help; white-space: nowrap;
+  color: var(--dev); border: 1px solid color-mix(in srgb, var(--dev) 45%, transparent);
+}
 .path-stale { flex: none; color: var(--warn-text); font-size: 0.72rem; font-weight: 600; white-space: nowrap; cursor: help; }
 .path-busy { flex: none; color: var(--muted); font-size: 0.72rem; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .path-copy { flex: none; border: none; background: transparent; color: var(--muted); cursor: pointer; padding: 0.1rem 0.3rem; border-radius: 4px; }
