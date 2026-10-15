@@ -386,7 +386,9 @@ export async function loadWorkspace(id: string): Promise<Workspace> {
 //   kubectl : KUBECONFIG=<workspace>/kube/config:~/.kube/config ; le premier fichier reçoit le
 //   contexte courant (use-context) et les clusters ajoutés par az aks get-credentials ; les clusters
 //   de ~/.kube/config restent visibles partout, avec leur namespace (attribut du contexte, partagé).
-// Az PowerShell n'a pas de dossier de contexte configurable : il reste partagé, et signalé comme tel.
+//   Az PowerShell : CLOUDBOX_AZPS_HOME, lu par le profil PowerShell. Az.Accounts n'a pas de réglage
+//   de dossier : il calcule ses chemins depuis HOME une seule fois, à son import ; le profil l'importe
+//   donc avec HOME=<workspace>/azps (contexte AzureRmContext.json et cache MSAL du workspace).
 
 export const IDENTITY_MODES = ['isolated', 'shared'] as const;
 export type IdentityMode = (typeof IDENTITY_MODES)[number];
@@ -417,12 +419,13 @@ export function identityEnv(ws: Pick<Workspace, 'id' | 'identities'>): Record<st
     AZD_CONFIG_DIR: path.join(dir, 'azd'),
     GH_CONFIG_DIR: path.join(dir, 'gh'),
     KUBECONFIG: `${path.join(dir, 'kube', 'config')}:${path.join(HOME, '.kube', 'config')}`,
+    CLOUDBOX_AZPS_HOME: path.join(dir, 'azps'),
   };
 }
 
 // Outils dont la connexion est commune à tous les workspaces
 export function sharedTools(ws: Pick<Workspace, 'identities'>): ContextTool[] {
-  return identityMode(ws) === 'shared' ? [...CONTEXT_TOOLS] : ['azPowerShell'];
+  return identityMode(ws) === 'shared' ? [...CONTEXT_TOOLS] : [];
 }
 
 // --- tmux ---
@@ -505,9 +508,10 @@ export async function azureCliContext(env: Record<string, string> = {}): Promise
   }
 }
 
-export async function azPowerShellContext(): Promise<Record<string, string> | null> {
+export async function azPowerShellContext(env: Record<string, string> = {}): Promise<Record<string, string> | null> {
+  const dir = path.join(env.CLOUDBOX_AZPS_HOME ?? HOME, '.Azure');
   try {
-    const data = await readJson(path.join(HOME, '.Azure', 'AzureRmContext.json'));
+    const data = await readJson(path.join(dir, 'AzureRmContext.json'));
     if (!isRecord(data) || !isRecord(data.Contexts) || typeof data.DefaultContextKey !== 'string') return null;
     const ctx = data.Contexts[data.DefaultContextKey];
     if (!isRecord(ctx)) return null;
@@ -561,7 +565,7 @@ export async function cloudContext(ws?: Workspace) {
   const env = ws ? identityEnv(ws) : {};
   const [azureCli, azPowerShell, kubernetes, github] = await Promise.all([
     azureCliContext(env),
-    azPowerShellContext(),
+    azPowerShellContext(env),
     kubernetesContext(env),
     githubContext(env),
   ]);

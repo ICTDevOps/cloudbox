@@ -188,8 +188,8 @@ const fr = {
       'workspaces en mode partagé, à VS Code et à docker exec. Modifiable dans les paramètres du workspace.',
     isolated: 'connexions isolées',
     isolatedTitle:
-      'az, azd, gh et le contexte kubectl sont propres à ce workspace : une connexion ici ne change rien ailleurs. ' +
-      'Restent communs : Az PowerShell (Connect-AzAccount), CLI for Microsoft 365, le namespace des contextes kubectl, le terminal de VS Code ' +
+      'az, azd, Az PowerShell (Connect-AzAccount), gh et le contexte kubectl sont propres à ce workspace : une connexion ici ne change rien ailleurs. ' +
+      'Restent communs : CLI for Microsoft 365, le namespace des contextes kubectl, le terminal de VS Code ' +
       'et docker exec. Graph, Exchange, Teams et PnP se connectent terminal par terminal.',
     toolShared: 'Connexion commune à tous les workspaces (non isolable)',
   },
@@ -199,7 +199,7 @@ const fr = {
     groupTools: 'Outils',
     azSub: 'Azure CLI : abonnement',
     subscriptionPlaceholder: 'abonnement',
-    identitiesIsolated: 'Connexions isolées : az, azd, gh et kubectl valent pour ce workspace seulement. Az PowerShell et CLI for Microsoft 365 restent communs à tous les workspaces.',
+    identitiesIsolated: 'Connexions isolées : az, azd, Az PowerShell, gh et kubectl valent pour ce workspace seulement. CLI for Microsoft 365 reste commun à tous les workspaces.',
     identitiesShared: 'Connexions partagées : une connexion ici vaut pour tous les workspaces en mode partagé.',
     perTerminal: 'par terminal',
     perTerminalTitle: 'Connexion propre à chaque session PowerShell : non visible depuis le portail',
@@ -232,7 +232,7 @@ const fr = {
   identities: {
     title: 'Connexions des terminaux',
     isolated: 'Isolées',
-    isolatedHelp: 'az, azd, gh et contexte kubectl propres à ce workspace (recommandé).',
+    isolatedHelp: 'az, azd, Az PowerShell, gh et contexte kubectl propres à ce workspace (recommandé).',
     shared: 'Partagées',
     sharedHelp: 'Communes avec les autres workspaces partagés, VS Code et docker exec.',
     reopen: 'Les terminaux déjà ouverts gardent leur mode : fermez-les puis rouvrez-les après l’enregistrement.',
@@ -563,8 +563,8 @@ const en: Messages = {
       'workspaces, VS Code and docker exec. Can be changed in the workspace settings.',
     isolated: 'isolated sign-ins',
     isolatedTitle:
-      'az, azd, gh and the kubectl context belong to this workspace: signing in here changes nothing elsewhere. ' +
-      'Still common: Az PowerShell (Connect-AzAccount), CLI for Microsoft 365, the namespace of kubectl contexts, the VS Code terminal ' +
+      'az, azd, Az PowerShell (Connect-AzAccount), gh and the kubectl context belong to this workspace: signing in here changes nothing elsewhere. ' +
+      'Still common: CLI for Microsoft 365, the namespace of kubectl contexts, the VS Code terminal ' +
       'and docker exec. Graph, Exchange, Teams and PnP sign in terminal by terminal.',
     toolShared: 'Sign-in common to all workspaces (cannot be isolated)',
   },
@@ -574,7 +574,7 @@ const en: Messages = {
     groupTools: 'Tools',
     azSub: 'Azure CLI: subscription',
     subscriptionPlaceholder: 'subscription',
-    identitiesIsolated: 'Isolated sign-ins: az, azd, gh and kubectl apply to this workspace only. Az PowerShell and CLI for Microsoft 365 stay common to all workspaces.',
+    identitiesIsolated: 'Isolated sign-ins: az, azd, Az PowerShell, gh and kubectl apply to this workspace only. CLI for Microsoft 365 stays common to all workspaces.',
     identitiesShared: 'Shared sign-ins: signing in here applies to every shared workspace.',
     perTerminal: 'per terminal',
     perTerminalTitle: 'Sign-in specific to each PowerShell session: not visible from the portal',
@@ -607,7 +607,7 @@ const en: Messages = {
   identities: {
     title: 'Terminal sign-ins',
     isolated: 'Isolated',
-    isolatedHelp: 'az, azd, gh and kubectl context belong to this workspace (recommended).',
+    isolatedHelp: 'az, azd, Az PowerShell, gh and kubectl context belong to this workspace (recommended).',
     shared: 'Shared',
     sharedHelp: 'Common with the other shared workspaces, VS Code and docker exec.',
     reopen: 'Terminals already open keep their mode: close and reopen them after saving.',
