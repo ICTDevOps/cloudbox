@@ -195,7 +195,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- Terraform (licence BSL, voir README) ---
 # renovate: datasource=github-releases depName=hashicorp/terraform extractVersion=^v(?<version>.+)$
-ARG TERRAFORM_VERSION=1.16.5
+ARG TERRAFORM_VERSION=1.16.6
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" \
