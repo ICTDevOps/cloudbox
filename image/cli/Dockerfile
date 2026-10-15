@@ -160,7 +160,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- Helm ---
 # renovate: datasource=github-releases depName=helm/helm extractVersion=^v(?<version>.+)$
-ARG HELM_VERSION=4.3.0
+ARG HELM_VERSION=4.3.1
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="helm-v${HELM_VERSION}-linux-${TARGETARCH}.tar.gz" \
