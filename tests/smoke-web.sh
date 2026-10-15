@@ -141,8 +141,32 @@ expect "POST dossier ../../etc" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil"
 expect "message d'erreur en anglais (Accept-Language)" "Invalid environment (dev, acc or prd)" \
     "$(docker exec "$NAME" curl -s -X POST "${AUTH[@]}" "${JSON[@]}" -H 'Accept-Language: en' -d '{"id":"evil","name":"x","env":"prod"}' "$BASE/api/workspaces" | docker exec -i "$NAME" jq -r .error)"
 expect "POST environnement invalide" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"prod"}' "$BASE/api/workspaces")"
-expect "POST workspace client" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev"}' "$BASE/api/workspaces")"
+# Préférences du portail : valeurs par défaut, validation stricte, panneaux d'un nouveau workspace
+P="$BASE/api/preferences"
+expect "préférences par défaut" "auto dev pwsh,code,bash" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$P" | docker exec -i "$NAME" jq -r '"\(.theme) \(.newWorkspace.env) \(.newWorkspace.panels | join(","))"')"
+expect "PUT préférences sans Content-Type JSON (CSRF)" 415 "$(api -X PUT -H 'Content-Type: text/plain' -d '{"theme":"dark"}' "$P")"
+for bad in '{"theme":"pink"}' '{"newWorkspace":{"panels":[]}}' '{"newWorkspace":{"panels":["pwsh","pwsh"]}}' '{"newWorkspace":{"panels":["zsh"]}}' '{"newWorkspace":{"env":"prod"}}' '{"autre":1}'; do
+    expect "PUT préférences refusées : $bad" 400 "$(api -X PUT "${JSON[@]}" -d "$bad" "$P")"
+done
+expect "PUT préférences" 200 "$(api -X PUT "${JSON[@]}" -d '{"theme":"dark","newWorkspace":{"panels":["bash","code"]}}' "$P")"
+expect "préférences en 0600" 600 "$(docker exec "$NAME" stat -c %a /home/dev/.cloudbox/preferences.json)"
+expect "préférences enregistrées" "dark bash,code" "$(docker exec "$NAME" jq -r '"\(.theme) \(.newWorkspace.panels | join(","))"' /home/dev/.cloudbox/preferences.json)"
+# Apparence du terminal : mise à jour partielle, valeurs refusées
+for bad in '{"terminal":{"fontSize":99}}' '{"terminal":{"fontFamily":"Mono; } body {"}}' '{"terminal":{"cursorStyle":"beam"}}' '{"terminal":{"autre":1}}' '{"terminal":"grand"}'; do
+    expect "PUT préférences du terminal refusées : $bad" 400 "$(api -X PUT "${JSON[@]}" -d "$bad" "$P")"
+done
+expect "PUT préférences du terminal" 200 "$(api -X PUT "${JSON[@]}" -d '{"terminal":{"fontSize":16,"fontFamily":"'"'"'Cascadia Mono'"'"', monospace"}}' "$P")"
+expect "préférences du terminal enregistrées" "16 'Cascadia Mono', monospace block true dark" "$(docker exec "$NAME" jq -r '"\(.terminal.fontSize) \(.terminal.fontFamily) \(.terminal.cursorStyle) \(.terminal.pathBar) \(.theme)"' /home/dev/.cloudbox/preferences.json)"
+expect "POST panneaux invalides" 400 "$(api -X POST "${JSON[@]}" -d '{"id":"evil","name":"x","env":"dev","panels":["pwsh","rm"]}' "$BASE/api/workspaces")"
+expect "POST workspace client" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev","panels":["pwsh","code","bash"]}' "$BASE/api/workspaces")"
+expect "panneaux choisis à la création" "pwsh,code,bash" "$(docker exec "$NAME" jq -r '.initialPanels | join(",")' /home/dev/.cloudbox/workspaces/client.json)"
 expect "POST workspace client-prd" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"client-prd","name":"Client PRD","env":"prd"}' "$BASE/api/workspaces")"
+expect "panneaux des préférences par défaut" "bash,code" "$(docker exec "$NAME" jq -r '.initialPanels | join(",")' /home/dev/.cloudbox/workspaces/client-prd.json)"
+# Sélecteur de dossiers : sous-dossiers de /home/dev, sans les cachés, jamais au-dessus
+expect "GET dossiers de /home/dev" "workspaces" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/folders" | docker exec -i "$NAME" jq -r '.folders | map(select(. == "workspaces")) | join(",")')"
+expect "GET dossiers : cachés exclus" 0 "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/folders" | docker exec -i "$NAME" jq '[.folders[] | select(startswith("."))] | length')"
+expect "GET dossiers hors /home/dev" 400 "$(api "$BASE/api/folders?path=/etc")"
+expect "GET dossiers ../.." 400 "$(api "$BASE/api/folders?path=/home/dev/../..")"
 expect "POST doublon" 409 "$(api -X POST "${JSON[@]}" -d '{"id":"client","name":"Client","env":"dev"}' "$BASE/api/workspaces")"
 expect "dossier créé" "dev" "$(docker exec "$NAME" stat -c %U /home/dev/workspaces/client)"
 expect "liste des workspaces" "client client-prd" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces" | docker exec -i "$NAME" jq -r '[.[].id] | sort | join(" ")')"
@@ -163,6 +187,12 @@ for bad in '../x~1' 'client~1&arg=other~2' 'inconnu~1' 'client' 'Client~1'; do
 done
 expect "sessions tmux des workspaces" "client-prd_bash_2 client_pwsh_1" "$(docker exec "$NAME" tmux ls -F '#S' | grep _ | sort | tr '\n' ' ' | sed 's/ $//')"
 expect "GET workspace : sessions" "client_pwsh_1" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client" | docker exec -i "$NAME" jq -r '.sessions | join(" ")')"
+# Barre de chemin : dossier courant lu par tmux ; PowerShell aligne le dossier du processus sur Set-Location
+probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'Set-Location /tmp' >/dev/null
+sleep 1
+expect "GET terminaux : dossier courant (PowerShell)" "client_pwsh_1 /tmp true" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client/terminals" | docker exec -i "$NAME" jq -r '.terminals[] | "\(.session) \(.cwd) \(.idle)"')"
+probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'Set-Location ~/workspaces/client' >/dev/null
+expect "GET terminaux d'un workspace inconnu" 404 "$(api "$BASE/api/workspaces/inconnu/terminals")"
 # Paramètres de connexion : jeux de caractères stricts (les valeurs sont saisies dans un terminal)
 S="$BASE/api/workspaces/client"
 expect "PUT paramètres valides" 200 "$(api -X PUT "${JSON[@]}" -d '{"settings":{"tenant":"contoso.onmicrosoft.com","subscription":"11111111-2222-3333-4444-555555555555","sharepointUrl":"https://contoso.sharepoint.com/sites/it","clientId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}}' "$S")"
@@ -207,6 +237,9 @@ expect "config de l'assistant en 0600" 600 "$(docker exec "$NAME" stat -c %a /ho
 expect "clé saisie jamais renvoyée" 0 "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$A/config" | grep -c test-key-123456)"
 expect "modèles du fournisseur" "fake/model-a fake/model-b" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$A/models?provider=fake" | docker exec -i "$NAME" jq -r '.models | join(" ")')"
 expect "POST workspace ia" 201 "$(api -X POST "${JSON[@]}" -d '{"id":"ia","name":"IA","env":"dev"}' "$BASE/api/workspaces")"
+# Modèle propre au workspace : prioritaire sur le modèle par défaut
+expect "PUT modèle du workspace invalide" 400 "$(api -X PUT "${JSON[@]}" -d '{"assistant":{"provider":"Fake Provider","model":"x"}}' "$BASE/api/workspaces/ia")"
+expect "PUT modèle du workspace" 200 "$(api -X PUT "${JSON[@]}" -d '{"assistant":{"provider":"fake","model":"fake/model-b"}}' "$BASE/api/workspaces/ia")"
 probe "$BASE/term/pwsh/ws?arg=ia~1" "$TOKEN" "$BASE" 'echo ok' >/dev/null
 W="$BASE/api/workspaces/ia/assistant"
 conv=$(docker exec "$NAME" curl -s -X POST "${AUTH[@]}" "${JSON[@]}" "$W/conversations" | docker exec -i "$NAME" jq -r .id)
@@ -216,6 +249,7 @@ sse=$(docker exec "$NAME" curl -sN --max-time 30 "${AUTH[@]}" "${JSON[@]}" -d '{
 grep -q '^event: proposal' <<<"$sse" && grep -q '"reason":"awaiting"' <<<"$sse" && pass "flux SSE : proposition en attente" || fail "flux SSE : $(head -c 400 <<<"$sse")"
 expect "commande non exécutée avant validation" 0 "$(docker exec "$NAME" tmux capture-pane -p -t '=ia_pwsh_1:' | grep -c 'cloudbox-fake-ok')"
 expect "secret masqué avant envoi au fournisseur" 0 "$(docker exec "$NAME" grep -c Sup3rSecret99 /tmp/fake-provider.jsonl)"
+expect "modèle du workspace utilisé" "fake/model-b" "$(docker exec "$NAME" bash -c 'grep chat/completions /tmp/fake-provider.jsonl | tail -n 1 | jq -r .body | jq -r .model')"
 expect "secret masqué dans la conversation" 0 "$(docker exec "$NAME" grep -rc Sup3rSecret99 /home/dev/.cloudbox/assistant/workspaces/ia | awk -F: '{ n += $2 } END { print n + 0 }')"
 pid=$(docker exec "$NAME" jq -r '.proposals[0].id' "/home/dev/.cloudbox/assistant/workspaces/ia/conversations/$conv.json")
 P="$W/conversations/$conv/proposals/$pid"

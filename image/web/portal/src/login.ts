@@ -2,6 +2,14 @@
 import { getLang, setLang, t, type Lang } from './i18n';
 import './styles.css';
 
+// Thème choisi dans les Paramètres : cache local tenu par le portail (prefs.ts)
+try {
+  const theme = window.localStorage.getItem('cloudbox.theme');
+  if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+} catch {
+  // stockage indisponible : thème du système
+}
+
 // Textes de la page dans la langue choisie (le HTML contient la version française)
 function applyLang(): void {
   const m = t().login;

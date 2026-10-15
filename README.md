@@ -21,13 +21,17 @@ docker logs cloudbox   # access token, then open http://localhost:8080
 
 | | |
 |---|---|
-| ![Home page: tools and versions of the image](docs/screenshots/home.png) | ![Connections panel: sign-in commands completed with the workspace tenant](docs/screenshots/connections.png) |
-| **Home**: the three tools of every workspace, terminal tips and the version of each tool in the image. | **Connections**: device-code sign-in commands completed with the workspace settings, typed into a terminal without being run. |
-| ![Workspace settings](docs/screenshots/settings.png) | ![Home page, dark theme](docs/screenshots/home-dark.png) |
-| **Workspace settings**: name, environment (DEV / ACC / PRD), tenant, subscription, SharePoint URL, ClientId. | **Dark theme**, following the system setting. The interface is available in English and French. |
+| ![Home page: tools and versions of the image](docs/screenshots/home.png) | ![Cheat sheet: sign-in commands completed with the workspace tenant](docs/screenshots/connections.png) |
+| **Home**: the three tools of every workspace, terminal tips and the version of each tool in the image. | **Cheat sheet**: device-code sign-in commands completed with the workspace settings, typed into a terminal without being run. |
+| ![Workspace settings](docs/screenshots/settings.png) | ![Settings window, AI assistant tab](docs/screenshots/preferences.png) |
+| **Workspace settings**: name, environment (DEV / ACC / PRD), tenant, subscription, SharePoint URL, ClientId. | **Settings**: language, theme, panels of new workspaces, and the AI assistant (API keys, default model). |
+| ![New workspace window, with the folder picker open](docs/screenshots/new-workspace.png) | ![Settings window, Terminal tab](docs/screenshots/terminal-settings.png) |
+| **New workspace**: name, ID, environment, working folder (typed or picked among the folders of `/home/dev`) and the panels to open. | **Terminal appearance**: font, size, line height, cursor, colours, path bar. Applied right away to every open terminal. |
+| ![Home page, light theme](docs/screenshots/home-light.png) | |
+| **Light theme**: the screenshots above use the dark theme. The theme follows the system setting or is chosen in Settings; the interface is available in English and French. | |
 
 The screenshots are produced by [`docs/screenshots/capture.sh`](docs/screenshots/capture.sh)
-(headless Chromium on a throwaway container with sample workspaces).
+(headless Chromium on a throwaway container with sample workspaces, dark theme except `home-light.png`).
 
 ## How it works
 
@@ -245,19 +249,37 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 
 - A sidebar, always visible, lists the workspaces (coloured by environment) and creates new
   ones: name, ID, **DEV / ACC / PRD** environment, working folder (by default
-  `/home/dev/workspaces/<id>`). It collapses to a column of icons.
+  `/home/dev/workspaces/<id>`, typed or picked with the folder button among the non-hidden folders
+  of `/home/dev`) and the panels to open (PowerShell, Bash, VS Code, Assistant).
+  It collapses to a column of icons.
+- **Settings** (⚙ at the bottom of the sidebar), stored in the volume
+  (`~/.cloudbox/preferences.json`): language, theme (system, light, dark), the environment and
+  panels suggested for new workspaces, the terminal appearance and the
+  [AI assistant](#ai-assistant-optional).
+- **Terminal appearance** (Settings → Terminal): font (one installed on your computer, such as
+  Cascadia Mono or Consolas, or any CSS font list), size, line height, cursor style, and light or
+  dark colours (by default, those of the portal). Changes apply right away to every open terminal,
+  including the plain `/term/pwsh/` and `/term/bash/` pages.
+- **Panel tabs**: the **+** after the tabs of a group opens another terminal of the same kind in
+  that group; on the right, open the panel alone in a new browser tab (same tmux session for a
+  terminal) and maximize or restore the group.
+- **Path bar** above each terminal panel: the current folder as read by tmux, refreshed every
+  2 seconds. Clicking a segment types `cd '<folder>'` into the terminal without running it; the
+  segments are disabled while a command is running. The ⧉ button copies the path. The parts outside
+  the workspace folder are dimmed. It can be turned off in Settings → Terminal.
 - Switching between workspaces reloads nothing: the last four opened stay loaded (terminals and
   VS Code), marked by a blue dot in the sidebar.
 - The layout is saved automatically in the volume (`~/.cloudbox/workspaces/<id>.json`) and
   restored at the next visit.
 - Each terminal panel has its own tmux session, `<id>_<shell>_<n>`: reloading the page, closing
   the browser tab or moving a panel does not stop it. Only the cross on a tab (with confirmation)
-  closes the session. Deleting a workspace (⚙ Settings) closes its sessions but **keeps its
-  folder**.
-- **Settings** (⚙ button): name, environment and the workspace sign-in values (tenant,
-  subscription, SharePoint URL, ClientId of the Entra application used by PnP and CLI for
-  Microsoft 365).
-- **Connections** (button on the right of the toolbar, or Ctrl+Shift+K, including from a
+  closes the session.
+- **🗑 Delete** (workspace toolbar, next to ⚙ Settings) asks for a confirmation, and in PRD for the
+  workspace ID to be typed. It closes the workspace sessions but **keeps its folder**.
+- **Workspace settings** (⚙ button of the workspace): name, environment, the workspace sign-in
+  values (tenant, subscription, SharePoint URL, ClientId of the Entra application used by PnP and
+  CLI for Microsoft 365) and, if the assistant is enabled, a model for this workspace.
+- **Cheat sheet** (button on the right of the toolbar, or Ctrl+Shift+K, including from a
   terminal): panel of sign-in commands, completed with the workspace settings. Each command can
   be copied, or typed with one click into the last terminal used (a PowerShell terminal for
   cmdlets), **without being run**: review it, then press Enter. The actual state is shown when
@@ -279,8 +301,9 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
 Each workspace can open an **Assistant** panel that helps during the session: it reads the actual
 context, the workspace terminals and files, and proposes commands that you approve.
 
-- **Disabled by default.** Enable it from **AI assistant** in the sidebar, enter an API key and
-  pick a default model (the list is read from the provider). `CLOUDBOX_ASSISTANT=off` forbids it.
+- **Disabled by default.** Enable it in **Settings → AI assistant** (sidebar), enter an API key and
+  pick a default model (the list is read from the provider). A workspace can use its own model
+  (workspace ⚙), for instance a cheaper one in DEV. `CLOUDBOX_ASSISTANT=off` forbids it.
 - **Providers (API key):** OpenRouter, Anthropic, OpenAI, and any OpenAI-compatible endpoint
   (Azure OpenAI with its `api-key` header, a company gateway). Keys are stored in the volume
   (`~/.cloudbox/assistant/config.json`, mode 600) or given as environment variables; they never go
@@ -309,7 +332,7 @@ context, the workspace terminals and files, and proposes commands that you appro
 
 ## Signing in to the services (device code)
 
-In a workspace, the **Connections** panel provides these commands already completed (tenant,
+In a workspace, the **Cheat sheet** panel provides these commands already completed (tenant,
 subscription, SharePoint URL, ClientId).
 
 | Service | Command |

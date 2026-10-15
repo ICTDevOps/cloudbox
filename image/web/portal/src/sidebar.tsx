@@ -1,9 +1,11 @@
 // Barre latérale : accueil, workspaces existants, création, déconnexion. Repliable (mémorisé).
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ENV_LABELS } from './api';
-import { AiSettingsForm } from './ai-settings';
 import { getLang, LANGS, setLang, t } from './i18n';
 import { CreateWorkspace, NEW_WORKSPACE_EVENT } from './home';
+import { Icon } from './icons';
+import { PreferencesDialog, readTab } from './preferences';
+import { OPEN_SETTINGS_EVENT, type PrefsTab } from './prefs';
 import { useWorkspaces, workspaceStore } from './store';
 
 const COLLAPSED_KEY = 'cloudbox.sidebar.collapsed';
@@ -29,12 +31,14 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const dialog = useRef<HTMLDialogElement>(null);
   const [dialogKey, setDialogKey] = useState(0);
-  const aiDialog = useRef<HTMLDialogElement>(null);
-  const [aiKey, setAiKey] = useState(0);
+  const prefsDialog = useRef<HTMLDialogElement>(null);
+  const [prefsKey, setPrefsKey] = useState(0);
+  const [prefsTab, setPrefsTab] = useState<PrefsTab>(readTab);
 
-  const openAi = () => {
-    setAiKey((k) => k + 1);
-    aiDialog.current?.showModal();
+  const openPrefs = (tab?: PrefsTab) => {
+    if (tab) setPrefsTab(tab);
+    setPrefsKey((k) => k + 1); // formulaires relus à chaque ouverture
+    if (!prefsDialog.current?.open) prefsDialog.current?.showModal();
   };
 
   const openCreate = () => {
@@ -50,9 +54,13 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
     // Bouton « Créer mon premier workspace » de l'accueil
     const onNew = () => openCreate();
     window.addEventListener(NEW_WORKSPACE_EVENT, onNew);
+    // « Ouvrir les paramètres » depuis un panneau (Assistant non configuré)
+    const onPrefs = (e: Event) => openPrefs((e as CustomEvent<PrefsTab | undefined>).detail);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onPrefs);
     return () => {
       window.removeEventListener('focus', onFocus);
       window.removeEventListener(NEW_WORKSPACE_EVENT, onNew);
+      window.removeEventListener(OPEN_SETTINGS_EVENT, onPrefs);
     };
   }, []);
 
@@ -70,17 +78,17 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
     <nav class={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label={m.navigation}>
       <div class="sidebar-head">
         <a class="brand" href="#/" title={m.home}>
-          <img src="/assets/favicon.svg" alt="" width="26" height="26" />
+          <Icon name="cube" size={30} class="brand-logo" />
           <span class="label">Cloudbox</span>
         </a>
         <button type="button" class="sidebar-toggle" onClick={toggle}
           aria-label={collapsed ? m.expand : m.collapse} title={collapsed ? m.expand : m.collapse}>
-          {collapsed ? '»' : '«'}
+          <Icon name={collapsed ? 'chevronsRight' : 'chevronsLeft'} size={16} />
         </button>
       </div>
 
       <a class={`nav-item${activeId === null ? ' active' : ''}`} href="#/" title={m.home}>
-        <span class="nav-icon" aria-hidden="true">⌂</span>
+        <span class="nav-icon"><Icon name="home" /></span>
         <span class="label">{m.home}</span>
       </a>
 
@@ -100,14 +108,14 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
         {list?.length === 0 && <li class="nav-empty label">{m.none}</li>}
       </ul>
       <button type="button" class="nav-item nav-new" onClick={openCreate} title={m.newWorkspace}>
-        <span class="nav-icon" aria-hidden="true">+</span>
+        <span class="nav-icon"><Icon name="plus" /></span>
         <span class="label">{m.newWorkspace}</span>
       </button>
 
       <div class="sidebar-foot">
-        <button type="button" class="nav-item" onClick={openAi} title={t().ai.open}>
-          <span class="nav-icon" aria-hidden="true">✦</span>
-          <span class="label">{t().ai.open}</span>
+        <button type="button" class="nav-item" onClick={() => openPrefs()} title={m.settings}>
+          <span class="nav-icon"><Icon name="gear" /></span>
+          <span class="label">{m.settings}</span>
         </button>
         <div class="lang-switch" role="group" aria-label={m.language}>
           {LANGS.map((l) => (
@@ -118,22 +126,22 @@ export function Sidebar({ activeId, alive }: { activeId: string | null; alive: r
           ))}
         </div>
         <a class="nav-item" href="/_auth/logout" title={m.logout}>
-          <span class="nav-icon" aria-hidden="true">⎋</span>
+          <span class="nav-icon"><Icon name="logout" /></span>
           <span class="label">{m.logout}</span>
         </a>
       </div>
 
-      <dialog class="create-dialog" ref={dialog} aria-label={m.newWorkspace}>
-        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => dialog.current?.close()}>×</button>
+      <dialog class="create-dialog new-ws-dialog" ref={dialog} aria-label={m.newWorkspace}>
+        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => dialog.current?.close()}><Icon name="close" size={18} /></button>
         <CreateWorkspace key={dialogKey} onCreated={(id) => {
           dialog.current?.close();
           workspaceStore.reload();
           window.location.hash = `#/w/${id}`;
         }} />
       </dialog>
-      <dialog class="create-dialog settings-dialog" ref={aiDialog} aria-label={t().ai.title}>
-        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => aiDialog.current?.close()}>×</button>
-        {aiKey > 0 && <AiSettingsForm key={aiKey} onClose={() => aiDialog.current?.close()} />}
+      <dialog class="create-dialog prefs-dialog" ref={prefsDialog} aria-label={t().prefs.title}>
+        <button type="button" class="dialog-close" aria-label={t().common.close} onClick={() => prefsDialog.current?.close()}><Icon name="close" size={18} /></button>
+        {prefsKey > 0 && <PreferencesDialog key={prefsKey} tab={prefsTab} onTab={setPrefsTab} />}
       </dialog>
     </nav>
   );

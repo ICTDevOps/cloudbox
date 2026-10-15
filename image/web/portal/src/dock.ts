@@ -16,16 +16,22 @@ import {
   themeDark,
   themeLight,
   type DockviewApi,
+  type DockviewGroupPanel,
   type GroupPanelPartInitParameters,
+  type IGroupHeaderProps,
+  type IHeaderActionsRenderer,
   type IContentRenderer,
   type ITabRenderer,
   type TabPartInitParameters,
 } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
-import { api, type Workspace } from './api';
+import { api, type PanelKind, type Workspace } from './api';
 import { t } from './i18n';
+import { iconElement, type IconName } from './icons';
+import { PathBar, TerminalWatcher } from './pathbar';
+import { isDark, onThemeChange } from './prefs';
 
-export type PanelKind = 'pwsh' | 'bash' | 'code' | 'assistant';
+export type { PanelKind };
 type TerminalKind = 'pwsh' | 'bash';
 
 interface PanelParams {
@@ -34,8 +40,12 @@ interface PanelParams {
 }
 
 const TITLES: Record<PanelKind, string> = { pwsh: 'PowerShell', bash: 'Bash', code: 'VS Code', assistant: 'Assistant' };
-const ICONS: Record<PanelKind, string> = { pwsh: '>_', bash: '$_', code: '{ }', assistant: '✦' };
+const ICONS: Record<PanelKind, IconName> = { pwsh: 'pwsh', bash: 'bash', code: 'code', assistant: 'sparkle' };
 const SAVE_DELAY_MS = 600;
+// Thèmes Dockview : groupes espacés (cartes) ; les couleurs viennent des variables du portail (styles.css)
+const DARK = { ...themeDark, gap: 8 };
+const LIGHT = { ...themeLight, gap: 8 };
+const dockTheme = () => (isDark() ? DARK : LIGHT);
 // Raccourci du panneau Connexions, émis aussi depuis les terminaux (qui ont le focus clavier)
 export const CONNECTIONS_EVENT = 'cloudbox:connections';
 
@@ -61,15 +71,24 @@ function panelTitle(p: PanelParams): string {
   return isTerminal(p.kind) ? `${TITLES[p.kind]} ${p.n}` : TITLES[p.kind];
 }
 
-// Contenu d'un panneau : une iframe vers /term/<shell>/?arg=<workspace>~<n> ou /code/?folder=…
+// Contenu d'un panneau : une iframe vers /term/<shell>/?arg=<workspace>~<n> ou /code/?folder=…,
+// précédée de la barre de chemin pour les terminaux
 class FramePanel implements IContentRenderer {
   readonly element = document.createElement('div');
   private readonly ws: Workspace;
   private readonly onFocus: (panelId: string) => void;
+  private readonly watcher: TerminalWatcher;
+  private readonly focusPanel: (panelId: string) => void;
+  private readonly onError: (message: string) => void;
+  private pathBar: PathBar | null = null;
 
-  constructor(ws: Workspace, onFocus: (panelId: string) => void) {
+  constructor(ws: Workspace, onFocus: (panelId: string) => void, watcher: TerminalWatcher,
+    focusPanel: (panelId: string) => void, onError: (message: string) => void) {
     this.ws = ws;
     this.onFocus = onFocus;
+    this.watcher = watcher;
+    this.focusPanel = focusPanel;
+    this.onError = onError;
     this.element.className = 'panel-frame';
   }
 
@@ -98,7 +117,17 @@ class FramePanel implements IContentRenderer {
         }, true);
       });
     }
+    if (isTerminal(p.kind)) {
+      const id = parameters.api.id;
+      this.pathBar = new PathBar(this.ws.id, this.ws.folder, `${this.ws.id}_${p.kind}_${p.n}`, p.kind, this.watcher,
+        () => this.focusPanel(id), this.onError);
+      this.element.append(this.pathBar.element);
+    }
     this.element.append(frame);
+  }
+
+  dispose(): void {
+    this.pathBar?.dispose();
   }
 }
 
@@ -137,7 +166,7 @@ class ClosableTab implements ITabRenderer {
     const p = parameters.params as unknown as PanelParams;
     const icon = document.createElement('span');
     icon.className = `cb-tab-icon ${p.kind}`;
-    icon.textContent = ICONS[p.kind];
+    icon.append(iconElement(ICONS[p.kind], 16));
     const label = document.createElement('span');
     label.className = 'cb-tab-label';
     label.textContent = panelTitle(p);
@@ -146,7 +175,7 @@ class ClosableTab implements ITabRenderer {
     close.className = 'cb-tab-close';
     close.title = p.kind === 'code' ? t().dock.closeCode : p.kind === 'assistant' ? t().dock.closeAssistant : t().dock.closeTerminal;
     close.setAttribute('aria-label', close.title);
-    close.textContent = '×';
+    close.append(iconElement('close', 14));
     // Ne pas déclencher le glisser-déposer de l'onglet
     close.addEventListener('pointerdown', (e) => e.stopPropagation());
     close.addEventListener('click', (e) => {
@@ -154,6 +183,107 @@ class ClosableTab implements ITabRenderer {
       this.onClose(parameters);
     });
     this.element.append(icon, label, close);
+  }
+}
+
+// Adresse d'un panneau ouvert seul dans un onglet du navigateur (même session tmux pour un terminal)
+function standaloneUrl(ws: Workspace, p: PanelParams): string | null {
+  if (isTerminal(p.kind)) return `/term/${p.kind}/?arg=${ws.id}~${p.n}`;
+  if (p.kind === 'code') return `/code/?folder=${encodeURIComponent(ws.folder)}`;
+  return null;
+}
+
+function actionButton(icon: IconName, title: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'cb-group-action';
+  b.title = title;
+  b.setAttribute('aria-label', title);
+  b.append(iconElement(icon, 16));
+  b.addEventListener('pointerdown', (e) => e.stopPropagation());
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return b;
+}
+
+// Après les onglets d'un groupe : « + » ajoute un terminal du même type que l'onglet actif, dans ce groupe
+class AddInGroupAction implements IHeaderActionsRenderer {
+  readonly element = document.createElement('div');
+  private readonly addInGroup: (kind: TerminalKind, group: DockviewGroupPanel) => void;
+  private disposables: { dispose(): void }[] = [];
+
+  constructor(addInGroup: (kind: TerminalKind, group: DockviewGroupPanel) => void) {
+    this.addInGroup = addInGroup;
+    this.element.className = 'cb-group-actions left';
+  }
+
+  init(params: IGroupHeaderProps): void {
+    const group = params.group as DockviewGroupPanel;
+    const button = actionButton('plus', '', () => {
+      const kind = (group.activePanel?.params as PanelParams | undefined)?.kind;
+      if (kind && isTerminal(kind)) this.addInGroup(kind, group);
+    });
+    const update = () => {
+      const kind = (group.activePanel?.params as PanelParams | undefined)?.kind;
+      button.hidden = !kind || !isTerminal(kind);
+      if (kind && isTerminal(kind)) {
+        button.title = t().dock.addHere(TITLES[kind]);
+        button.setAttribute('aria-label', button.title);
+      }
+    };
+    update();
+    this.disposables.push(params.api.onDidActivePanelChange(update));
+    this.element.append(button);
+  }
+
+  dispose(): void {
+    this.disposables.forEach((d) => d.dispose());
+  }
+}
+
+// À droite d'un groupe : ouvrir dans un onglet du navigateur, agrandir / restaurer
+class GroupRightActions implements IHeaderActionsRenderer {
+  readonly element = document.createElement('div');
+  private readonly ws: Workspace;
+  private disposables: { dispose(): void }[] = [];
+
+  constructor(ws: Workspace) {
+    this.ws = ws;
+    this.element.className = 'cb-group-actions right';
+  }
+
+  init(params: IGroupHeaderProps): void {
+    const group = params.group as DockviewGroupPanel;
+    const popout = actionButton('external', t().dock.openTab, () => {
+      const p = group.activePanel?.params as PanelParams | undefined;
+      const url = p && standaloneUrl(this.ws, p);
+      if (url) window.open(url, '_blank', 'noopener');
+    });
+    const maximize = actionButton('maximize', '', () => {
+      if (params.api.isMaximized()) params.api.exitMaximized();
+      else params.api.maximize();
+      update();
+    });
+    const update = () => {
+      const p = group.activePanel?.params as PanelParams | undefined;
+      popout.hidden = !p || !standaloneUrl(this.ws, p);
+      const max = params.api.isMaximized();
+      maximize.title = max ? t().dock.restore : t().dock.maximize;
+      maximize.setAttribute('aria-label', maximize.title);
+      maximize.replaceChildren(iconElement(max ? 'restore' : 'maximize', 16));
+    };
+    update();
+    this.disposables.push(
+      params.api.onDidActivePanelChange(update),
+      params.containerApi.onDidMaximizedGroupChange(update),
+    );
+    this.element.append(popout, maximize);
+  }
+
+  dispose(): void {
+    this.disposables.forEach((d) => d.dispose());
   }
 }
 
@@ -194,14 +324,21 @@ export interface DockHandle {
   dispose(): void;
 }
 
-export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: string) => void, renderAssistant: AssistantRenderer): DockHandle {
+export function mountDock(
+  root: HTMLElement,
+  ws: Workspace,
+  onError: (message: string) => void,
+  renderAssistant: AssistantRenderer,
+  assistantAvailable: () => Promise<boolean>,
+): DockHandle {
   let restoring = true;
   let disposed = false;
   let saveTimer = 0;
   const listeners = new Set<() => void>();
   // Panneaux par ordre d'utilisation, le plus récent en premier
   let recent: string[] = [];
-  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  // Dossier courant des terminaux (barres de chemin)
+  const watcher = new TerminalWatcher(ws.id);
 
   const closePanel = async (parameters: TabPartInitParameters) => {
     const p = parameters.params as unknown as PanelParams;
@@ -221,10 +358,16 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   };
 
   const dockApi: DockviewApi = createDockview(root, {
-    theme: dark ? themeDark : themeLight,
+    theme: dockTheme(),
     createComponent: (options) =>
-      options.name === 'assistant' ? new AssistantPanel(renderAssistant) : new FramePanel(ws, (id) => touch(id)),
+      options.name === 'assistant' ? new AssistantPanel(renderAssistant) : new FramePanel(ws, (id) => touch(id), watcher, (id) => handle.focusPanel(id), onError),
     createTabComponent: () => new ClosableTab(closePanel),
+    createLeftHeaderActionComponent: () => new AddInGroupAction((kind, group) => {
+      add(kind, { referenceGroup: group })
+        .then(() => save())
+        .catch((err: Error) => onError(err.message));
+    }),
+    createRightHeaderActionComponent: () => new GroupRightActions(ws),
     defaultTabComponent: 'cloudbox-tab',
     // Les iframes ne doivent pas être déplacées dans le DOM (elles se rechargeraient)
     defaultRenderer: 'always',
@@ -239,7 +382,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
     }, SAVE_DELAY_MS);
   };
 
-  const add = async (kind: PanelKind, position?: { referencePanel: string; direction: 'right' | 'below' }) => {
+  const add = async (kind: PanelKind, position?: { referencePanel: string; direction: 'right' | 'below' } | { referenceGroup: DockviewGroupPanel }) => {
     const params: PanelParams = isTerminal(kind) ? { kind, n: await api.allocatePanel(ws.id) } : { kind };
     if (disposed) return;
     const id = isTerminal(kind) ? `${kind}-${params.n}` : kind;
@@ -255,11 +398,18 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
     });
   };
 
+  // Première ouverture : panneaux choisis à la création (préférences), à défaut la disposition
+  // historique. Premier terminal à gauche, VS Code à sa droite, terminal suivant en dessous,
+  // assistant à droite de l'ensemble (s'il est activé).
   const defaultLayout = async () => {
-    await add('pwsh');
+    let kinds: PanelKind[] = ws.initialPanels?.length ? ws.initialPanels : ['pwsh', 'code', 'bash'];
+    if (kinds.includes('assistant') && !(await assistantAvailable())) kinds = kinds.filter((k) => k !== 'assistant');
+    const terminals = kinds.filter(isTerminal);
+    if (terminals[0]) await add(terminals[0]);
     const first = dockApi.panels[0]?.id;
-    await add('code', first ? { referencePanel: first, direction: 'right' } : undefined);
-    if (first) await add('bash', { referencePanel: first, direction: 'below' });
+    if (kinds.includes('code')) await add('code', first ? { referencePanel: first, direction: 'right' } : undefined);
+    if (first && terminals[1]) await add(terminals[1], { referencePanel: first, direction: 'below' });
+    if (kinds.includes('assistant')) await add('assistant');
   };
 
   const notify = () => listeners.forEach((l) => l());
@@ -299,6 +449,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   restore().catch((err: Error) => onError(err.message));
 
   const subscriptions = [
+    { dispose: onThemeChange(() => dockApi.updateOptions({ theme: dockTheme() })) },
     dockApi.onDidLayoutChange(() => {
       if (!restoring) save();
       notify();
@@ -315,7 +466,7 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
   };
   window.addEventListener('pagehide', onPageHide);
 
-  return {
+  const handle: DockHandle = {
     addPanel(kind) {
       // VS Code et l'assistant : un seul panneau par workspace
       if (!isTerminal(kind) && dockApi.getPanel(kind)) {
@@ -362,7 +513,9 @@ export function mountDock(root: HTMLElement, ws: Workspace, onError: (message: s
       disposed = true;
       subscriptions.forEach((s) => s.dispose());
       removeGuard();
+      watcher.dispose();
       dockApi.dispose();
     },
   };
+  return handle;
 }

@@ -6,13 +6,15 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
-  api, type AssistantConfig, type AssistantEvent, type AssistantState, type CloudContext, type Conversation, type Proposal,
+  api, ENV_LABELS, type AssistantConfig, type AssistantEvent, type AssistantState, type CloudContext, type Conversation, type Proposal,
   type Workspace, type WorkspaceSettings,
 } from './api';
 import { CopyButton } from './connections';
 import { useCloudContext } from './context';
 import type { DockHandle } from './dock';
 import { t, useLang } from './i18n';
+import { Icon } from './icons';
+import { openSettings } from './prefs';
 
 // --- Configuration (partagée par les panneaux et la barre d'outils) ---
 
@@ -199,6 +201,31 @@ function ProposalCard({ p, result, ws, dock, busy, onApprove, onReject }: {
 
 // --- Panneau ---
 
+// Carte « Contexte du workspace » de l'assistant vide : ce que l'assistant joint à chaque échange
+function WorkspaceContextCard({ ws }: { ws: Workspace }) {
+  const m = t().assistant;
+  const ctx = useCloudContext();
+  const real = ctx && ctx !== 'error' ? ctx : null;
+  const az = real?.azureCli;
+  return (
+    <div class="assistant-card context">
+      <Icon name="folder" size={20} />
+      <div>
+        <p class="assistant-card-title">{m.contextTitle}</p>
+        <dl>
+          <dt>{m.contextWorkspace}</dt><dd><code>{ws.id}</code> <span class={`env-badge env-${ws.env}`}>{ENV_LABELS[ws.env]}</span></dd>
+          <dt>{m.contextPath}</dt><dd><code>{ws.folder}</code></dd>
+        </dl>
+        <ul>
+          {real?.sharedAcrossWorkspaces && <li><Icon name="share" size={15} /> {t().context.shared}</li>}
+          <li><Icon name="context" size={15} /> {az ? m.contextAz(az.subscription) : m.contextNone}</li>
+          {real?.kubernetes && <li><Icon name="kubernetes" size={15} /> {real.kubernetes.context}</li>}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => DockHandle | null }) {
   useLang(); // monté hors de l'arbre principal : suit lui-même la langue
   const m = t().assistant;
@@ -258,12 +285,12 @@ export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => 
     });
   }, [cfg?.enabled, ws.id]);
 
-  // Fournisseur et modèle : ceux de la conversation, sinon ceux par défaut
+  // Fournisseur et modèle : ceux de la conversation, sinon ceux du workspace, sinon ceux par défaut
   useEffect(() => {
-    const def = state?.default ?? cfg?.default ?? null;
+    const def = ws.assistant ?? state?.default ?? cfg?.default ?? null;
     setProvider(conv?.provider ?? def?.provider ?? cfg?.providers.find((p) => p.configured)?.id ?? '');
     setModel(conv?.model ?? def?.model ?? '');
-  }, [conv?.id, state, cfg]);
+  }, [conv?.id, state, cfg, ws.assistant?.provider, ws.assistant?.model]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -272,9 +299,10 @@ export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => 
 
   if (!cfg) return <div class="assistant"><p class="muted assistant-empty">{t().common.loading}</p></div>;
   if (!cfg.allowed) return <div class="assistant"><p class="muted assistant-empty">{m.forbidden}</p></div>;
-  if (!cfg.enabled) return <div class="assistant"><p class="muted assistant-empty">{m.disabled}</p></div>;
+  const goSettings = <button type="button" class="button small" onClick={() => openSettings('ai')}>{m.openSettings}</button>;
+  if (!cfg.enabled) return <div class="assistant"><p class="muted assistant-empty">{m.disabled} {goSettings}</p></div>;
   const configured = cfg.providers.filter((p) => p.configured);
-  if (!configured.length) return <div class="assistant"><p class="muted assistant-empty">{m.noProvider}</p></div>;
+  if (!configured.length) return <div class="assistant"><p class="muted assistant-empty">{m.noProvider} {goSettings}</p></div>;
 
   const onEvent = (e: AssistantEvent) => {
     const l = liveRef.current;
@@ -440,10 +468,13 @@ export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => 
             <option key={c.id} value={c.id}>{c.title || m.untitled}{c.pending ? ' ●' : ''}</option>
           ))}
         </select>
-        <button type="button" class="button ghost small" disabled={busy || !conv} onClick={() => setConv(null)} title={m.newConversation}>+</button>
-        <button type="button" class="button ghost small" disabled={busy || !conv} onClick={removeConversation} title={m.deleteConversation}
-          aria-label={m.deleteConversation}>🗑</button>
-        <button type="button" class={`button ghost small${memoryOpen ? ' primary' : ''}`} onClick={toggleMemory} title={m.memoryTitle}>{m.memory}</button>
+        <button type="button" class="button small icon-button" disabled={busy || !conv} onClick={() => setConv(null)} title={m.newConversation}
+          aria-label={m.newConversation}><Icon name="plus" size={16} /></button>
+        <button type="button" class="button small icon-button" disabled={busy || !conv} onClick={removeConversation} title={m.deleteConversation}
+          aria-label={m.deleteConversation}><Icon name="trash" size={16} /></button>
+        <button type="button" class={`button small${memoryOpen ? ' primary' : ''}`} onClick={toggleMemory} title={m.memoryTitle}>
+          <Icon name="memory" size={16} /> {m.memory}
+        </button>
       </div>
       <div class="assistant-bar">
         <select aria-label={m.provider} value={provider} disabled={busy} onChange={(e) => setProvider(e.currentTarget.value)}>
@@ -465,9 +496,15 @@ export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => 
       )}
       <div class="assistant-list" ref={listRef} aria-live="polite">
         {!conv?.messages.length && !live && (
-          <div class="assistant-empty muted">
-            <p>{m.empty}</p>
-            {state && <p class="field-help">{m.agentsHint(state.agentsFile)}</p>}
+          <div class="assistant-empty">
+            <div class="assistant-card info">
+              <Icon name="info" size={20} />
+              <div>
+                <p>{m.empty}</p>
+                {state && <p class="field-help">{m.agentsHint(state.agentsFile)}</p>}
+              </div>
+            </div>
+            <WorkspaceContextCard ws={ws} />
           </div>
         )}
         {conv?.messages.map((msg, i) => {
@@ -515,7 +552,8 @@ export function AssistantPanel({ ws, getDock }: { ws: Workspace; getDock: () => 
           }} />
         {busy
           ? <button type="button" class="button" onClick={stop}>{m.stop}</button>
-          : <button type="submit" class="button primary" disabled={!input.trim() || !provider || !model}>{m.send}</button>}
+          : <button type="submit" class="button primary send-button" disabled={!input.trim() || !provider || !model}
+            aria-label={m.send} title={m.send}><Icon name="send" size={18} /></button>}
       </form>
       <p class="field-help assistant-foot">{m.redaction}</p>
     </div>

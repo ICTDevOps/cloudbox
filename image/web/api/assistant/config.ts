@@ -88,6 +88,14 @@ export function checkModel(v: unknown): string {
   return v.trim();
 }
 
+// Fournisseur et modèle propres à un workspace ; null ou vide : retour au modèle par défaut
+export function checkWorkspaceAssistant(v: unknown): { provider: string; model: string } | null {
+  if (v === null || v === undefined) return null;
+  if (!isRecord(v)) throw new HttpError(400, 'Modèle du workspace invalide', 'Invalid workspace model');
+  if (!v.provider && !v.model) return null;
+  return { provider: checkProviderId(v.provider), model: checkModel(v.model) };
+}
+
 function checkProviderId(v: unknown): string {
   if (typeof v !== 'string' || !PROVIDER_ID_RE.test(v)) {
     throw new HttpError(400, 'Identifiant de fournisseur invalide (a-z, 0-9, tirets)', 'Invalid provider ID (a-z, 0-9, hyphens)');

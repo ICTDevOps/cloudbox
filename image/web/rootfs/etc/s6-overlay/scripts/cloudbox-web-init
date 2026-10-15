@@ -59,6 +59,9 @@ cat > "$machine/settings.json" <<JSON
     "update.mode": "none",
     "workbench.startupEditor": "none",
     "chat.disableAIFeatures": true,
-    "workbench.secondarySideBar.defaultVisibility": "hidden"
+    "workbench.secondarySideBar.defaultVisibility": "hidden",
+    "window.autoDetectColorScheme": true,
+    "workbench.preferredDarkColorTheme": "Default Dark Modern",
+    "workbench.preferredLightColorTheme": "Default Light Modern"
 }
 JSON

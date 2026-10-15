@@ -1,18 +1,65 @@
 // Vue d'un workspace : barre (environnement, contexte réel, ajout de panneaux), disposition Dockview,
-// panneau Connexions à droite et fenêtre des paramètres.
+// aide-mémoire (commandes de connexion) à droite, fenêtre des paramètres et suppression confirmée.
 // Une vue reste montée quand on passe à un autre workspace (masquée, pas détruite) : terminaux et
 // VS Code ne se rechargent pas au retour.
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type Workspace } from './api';
-import { AssistantPanel, useAssistantConfig } from './assistant';
+import { AssistantPanel, assistantConfigStore, useAssistantConfig } from './assistant';
 import { ConnectionsDrawer } from './connections';
 import { ContextBar } from './context';
 import { CONNECTIONS_EVENT, isConnectionsShortcut, mountDock, type DockHandle } from './dock';
 import { EnvBadge, TopBar } from './home';
+import { Icon } from './icons';
 import { t } from './i18n';
 import { WorkspaceSettingsForm } from './settings';
 import { workspaceStore } from './store';
+
+// Confirmation de la suppression : ce qui est fermé, supprimé et conservé ; en PRD, l'identifiant
+// du workspace doit être retapé
+function DeleteWorkspaceForm({ ws, onCancel, onDeleted }: { ws: Workspace; onCancel: () => void; onDeleted: () => void }) {
+  const m = t().settings;
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const prd = ws.env === 'prd';
+  const remove = async (e: Event) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.deleteWorkspace(ws.id);
+      onDeleted();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form class="card delete-ws" onSubmit={remove}>
+      <div class="dialog-head">
+        <span class="icon-tile large"><Icon name="trash" size={26} /></span>
+        <h2>{m.confirmTitle(ws.name)}</h2>
+      </div>
+      <ul>
+        <li>{m.confirmSessions}</li>
+        <li>{m.confirmAssistant}</li>
+        <li>{m.confirmFolder(ws.folder)}</li>
+      </ul>
+      {prd && (
+        <label>
+          {m.confirmTypeId(ws.id)}
+          <input value={typed} autocomplete="off" spellcheck={false} onInput={(e) => setTyped(e.currentTarget.value)} />
+        </label>
+      )}
+      {error && <p class="error" role="alert">{error}</p>}
+      <div class="ws-actions">
+        <button type="submit" class="button danger-solid" disabled={busy || (prd && typed.trim() !== ws.id)}>{m.confirmDelete}</button>
+        <button type="button" class="button ghost" onClick={onCancel} autofocus>{t().common.cancel}</button>
+      </div>
+    </form>
+  );
+}
 
 // Panneau Connexions ouvert ou fermé : préférence commune à tous les workspaces
 const DRAWER_KEY = 'cloudbox.connections.open';
@@ -52,7 +99,12 @@ function Dock({ ws, onReady, onError }: { ws: Workspace; onReady: (h: DockHandle
         render(null, element);
       };
     };
-    const handle = mountDock(ref.current!, ws, onError, renderAssistant);
+    // Assistant de la disposition initiale : seulement s'il est activé
+    const assistantAvailable = async () => {
+      if (!assistantConfigStore.get()) await assistantConfigStore.reload();
+      return Boolean(assistantConfigStore.get()?.enabled);
+    };
+    const handle = mountDock(ref.current!, ws, onError, renderAssistant, assistantAvailable);
     handleRef.current = handle;
     onReady(handle);
     return () => {
@@ -74,6 +126,8 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   const [drawer, setDrawer] = useState(readDrawer);
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [settingsKey, setSettingsKey] = useState(0);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
+  const [deleteKey, setDeleteKey] = useState(0);
   const assistant = useAssistantConfig();
 
   const toggleDrawer = (open?: boolean) => {
@@ -109,6 +163,11 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
   const openSettings = () => {
     setSettingsKey((k) => k + 1);
     settingsDialog.current?.showModal();
+  };
+
+  const openDelete = () => {
+    setDeleteKey((k) => k + 1);
+    deleteDialog.current?.showModal();
   };
 
   useEffect(() => {
@@ -151,29 +210,38 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
           </div>
         </div>
         <ContextBar showShared />
+        <div class="ws-head-actions">
+          <button type="button" class="button ws-settings-button" onClick={openSettings} title={m.workspace.settingsTitle}>
+            <Icon name="gear" size={17} /> {m.common.settings}
+          </button>
+          <button type="button" class="button danger ws-delete" onClick={openDelete} title={t().settings.deleteTitle}>
+            <Icon name="trash" size={17} /> {t().settings.deleteButton}
+          </button>
+          <button type="button" class={`button${drawer ? ' primary' : ''} conn-toggle`} onClick={() => toggleDrawer()}
+            aria-expanded={drawer} title={m.workspace.connectionsTitle}>
+            <Icon name="book" size={17} /> {m.common.connections}
+          </button>
+        </div>
       </TopBar>
-      <div class="ws-toolbar">
-        <button type="button" class="button" onClick={() => dock?.addPanel('pwsh')}>+ PowerShell</button>
-        <button type="button" class="button" onClick={() => dock?.addPanel('bash')}>+ Bash</button>
-        <button type="button" class="button" onClick={() => dock?.addPanel('code')}
-          title={dock?.hasCode() ? m.workspace.codeOpen : ''}>
-          {dock?.hasCode() ? 'VS Code' : '+ VS Code'}
+      <div class="ws-toolbar" title={m.workspace.autosave}>
+        <button type="button" class="button add-panel kind-pwsh" onClick={() => dock?.addPanel('pwsh')} title={m.workspace.add('PowerShell')}>
+          <Icon name="pwsh" size={20} /> PowerShell
+        </button>
+        <button type="button" class="button add-panel kind-bash" onClick={() => dock?.addPanel('bash')} title={m.workspace.add('Bash')}>
+          <Icon name="bash" size={20} /> Bash
+        </button>
+        <button type="button" class={`button add-panel kind-code${dock?.hasCode() ? ' is-open' : ''}`} onClick={() => dock?.addPanel('code')}
+          title={dock?.hasCode() ? m.workspace.codeOpen : m.workspace.add('VS Code')}>
+          <Icon name="code" size={20} /> VS Code
         </button>
         {assistant?.enabled && (
-          <button type="button" class="button" onClick={() => dock?.addPanel('assistant')}
-            title={dock?.hasAssistant() ? m.workspace.assistantOpen : ''}>
-            {dock?.hasAssistant() ? '✦ Assistant' : '+ ✦ Assistant'}
+          <button type="button" class={`button add-panel kind-assistant${dock?.hasAssistant() ? ' is-open' : ''}`}
+            onClick={() => dock?.addPanel('assistant')}
+            title={dock?.hasAssistant() ? m.workspace.assistantOpen : m.workspace.add('Assistant')}>
+            <Icon name="sparkle" size={20} /> Assistant
           </button>
         )}
         {error && <span class="error">{error}</span>}
-        <span class="muted toolbar-hint">{m.workspace.autosave}</span>
-        <button type="button" class="button ghost" onClick={openSettings} title={m.workspace.settingsTitle}>
-          ⚙ {m.common.settings}
-        </button>
-        <button type="button" class={`button${drawer ? ' primary' : ''} conn-toggle`} onClick={() => toggleDrawer()}
-          aria-expanded={drawer} title={m.workspace.connectionsTitle}>
-          {m.common.connections}
-        </button>
       </div>
       <div class="ws-body">
         <Dock ws={ws} onReady={setDock} onError={setError} />
@@ -182,7 +250,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
         )}
       </div>
       <dialog class="create-dialog settings-dialog" ref={settingsDialog} aria-label={m.workspace.settingsDialog}>
-        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => settingsDialog.current?.close()}>×</button>
+        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => settingsDialog.current?.close()}><Icon name="close" size={18} /></button>
         {settingsKey > 0 && (
           <WorkspaceSettingsForm key={settingsKey} ws={ws} onCancel={() => settingsDialog.current?.close()}
             onSaved={(saved) => {
@@ -190,8 +258,15 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
               setWs(saved);
               workspaceStore.reload();
             }}
+          />
+        )}
+      </dialog>
+      <dialog class="create-dialog delete-dialog" ref={deleteDialog} aria-label={t().settings.deleteTitle}>
+        <button type="button" class="dialog-close" aria-label={m.common.close} onClick={() => deleteDialog.current?.close()}><Icon name="close" size={18} /></button>
+        {deleteKey > 0 && (
+          <DeleteWorkspaceForm key={deleteKey} ws={ws} onCancel={() => deleteDialog.current?.close()}
             onDeleted={() => {
-              settingsDialog.current?.close();
+              deleteDialog.current?.close();
               window.location.hash = '#/';
               workspaceStore.reload();
             }} />
