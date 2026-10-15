@@ -193,13 +193,19 @@ sleep 1
 expect "GET terminaux : dossier courant (PowerShell)" "client_pwsh_1 /tmp true" "$(docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/client/terminals" | docker exec -i "$NAME" jq -r '.terminals[] | "\(.session) \(.cwd) \(.idle)"')"
 probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'Set-Location ~/workspaces/client' >/dev/null
 expect "GET terminaux d'un workspace inconnu" 404 "$(api "$BASE/api/workspaces/inconnu/terminals")"
-# Connexions par workspace : isolées par défaut (az, azd, gh, contexte kubectl), partagées sur demande
+# Connexions par workspace : isolées par défaut (az, azd, Az PowerShell, gh, contexte kubectl), partagées sur demande
 IDS=/home/dev/.cloudbox/identities
 ctxq() { docker exec "$NAME" curl -s "${AUTH[@]}" "$BASE/api/workspaces/$1/context" | docker exec -i "$NAME" jq -r "$2"; }
 out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" '"ids=" + $env:CLOUDBOX_IDENTITIES + " az=" + $env:AZURE_CONFIG_DIR + " ext=" + $env:AZURE_EXTENSION_DIR + " azd=" + $env:AZD_CONFIG_DIR + " gh=" + $env:GH_CONFIG_DIR + " kube=" + $env:KUBECONFIG')
 grep -q "ids=isolated az=$IDS/client/azure ext=/home/dev/.azure/cliextensions azd=$IDS/client/azd gh=$IDS/client/gh kube=$IDS/client/kube/config:/home/dev/.kube/config" <<<"$out" \
     && pass "terminal isolé : dossiers de connexion du workspace" || fail "terminal isolé : $(tail -c 400 <<<"$out")"
 expect "dossier des connexions en 0700" 700 "$(docker exec "$NAME" stat -c %a "$IDS/client")"
+# Az PowerShell : Az.Accounts importé par le profil avec HOME=<workspace>/azps (seul moyen de déplacer
+# son contexte) ; une mise à jour d'Az.Accounts qui changerait ce calcul doit bloquer la PR
+out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" '$s = Get-AzContextAutosaveSetting; "azps=" + $s.ContextDirectory + " cache=" + $s.CacheDirectory + " home=" + $env:HOME + " tilde=" + (Resolve-Path ~)')
+grep -q "azps=$IDS/client/azps/.Azure cache=$IDS/client/azps/.local/share/.IdentityService home=/home/dev tilde=/home/dev" <<<"$out" \
+    && pass "Az PowerShell : contexte et cache du workspace" || fail "Az PowerShell isolé : $(tail -c 400 <<<"$out")"
+expect "Az PowerShell : télémétrie coupée dans le workspace" "false" "$(docker exec "$NAME" jq -r .Az.EnableDataCollection "$IDS/client/azps/.Azure/PSConfig.json")"
 # kubeconfig neuf du workspace (sans contexte courant) : le prompt Cloudbox reste affiché
 out=$(probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'prompt')
 grep -q 'DEV client' <<<"$out" && pass "prompt PowerShell d'un terminal isolé" || fail "prompt PowerShell isolé : $(tail -c 300 <<<"$out")"
@@ -209,8 +215,23 @@ docker exec "$NAME" tmux kill-session -t '=client_bash_13'
 # Faux profil az dans le workspace client, faux kubeconfig commun à deux contextes
 docker exec "$NAME" bash -c "printf '{\"subscriptions\":[{\"id\":\"1\",\"name\":\"abo-client\",\"tenantId\":\"t\",\"isDefault\":true,\"user\":{\"name\":\"u\"}}]}' > $IDS/client/azure/azureProfile.json"
 docker exec "$NAME" bash -c 'mkdir -p ~/.kube && printf "apiVersion: v1\nkind: Config\nclusters:\n- name: c1\n  cluster: {server: https://c1.invalid}\n- name: c2\n  cluster: {server: https://c2.invalid}\nusers:\n- name: u\n  user: {token: x}\ncontexts:\n- name: ctx1\n  context: {cluster: c1, user: u}\n- name: ctx2\n  context: {cluster: c2, user: u}\ncurrent-context: ctx1\n" > ~/.kube/config'
-expect "contexte du workspace isolé (az)" "abo-client isolated false azPowerShell" "$(ctxq client '"\(.azureCli.subscription) \(.identities) \(.sharedAcrossWorkspaces) \(.shared | join(","))"')"
+expect "contexte du workspace isolé (az)" "abo-client isolated false 0" "$(ctxq client '"\(.azureCli.subscription) \(.identities) \(.sharedAcrossWorkspaces) \(.shared | length)"')"
 expect "connexion az d'un autre workspace invisible" "null" "$(ctxq client-prd '.azureCli')"
+out=$(probe "$BASE/term/bash/ws?arg=client-prd~14" "$TOKEN" "$BASE" 'echo "az=[$(__cloudbox_az_ctx)]"')
+grep -q 'az=\[\]' <<<"$out" && pass "prompt Bash d'un autre workspace : az non connecté" || fail "az dans client-prd : $(tail -c 300 <<<"$out")"
+docker exec "$NAME" tmux kill-session -t '=client-prd_bash_14'
+out=$(probe "$BASE/term/bash/ws?arg=client~14" "$TOKEN" "$BASE" 'echo "az=[$(__cloudbox_az_ctx)]"')
+grep -q 'az=\[.*az:abo-client' <<<"$out" && pass "prompt Bash du workspace : sa connexion az" || fail "az dans client : $(tail -c 300 <<<"$out")"
+docker exec "$NAME" tmux kill-session -t '=client_bash_14'
+# Faux contexte Az PowerShell enregistré dans le workspace client (ce qu'écrit Connect-AzAccount)
+docker exec "$NAME" bash -c "printf '{\"DefaultContextKey\":\"k\",\"EnvironmentTable\":{},\"Contexts\":{\"k\":{\"Account\":{\"Id\":\"u@x\",\"Type\":\"User\",\"Tenants\":[],\"ExtendedProperties\":{}},\"Tenant\":{\"Id\":\"00000000-0000-0000-0000-0000000000aa\",\"ExtendedProperties\":{}},\"Subscription\":{\"Id\":\"00000000-0000-0000-0000-0000000000bb\",\"Name\":\"azps-client\",\"State\":\"Enabled\",\"ExtendedProperties\":{}},\"Environment\":{\"Name\":\"AzureCloud\"},\"ExtendedProperties\":{}}},\"ExtendedProperties\":{}}' > $IDS/client/azps/.Azure/AzureRmContext.json"
+expect "contexte Az PowerShell du workspace" "azps-client null" "$(ctxq client .azPowerShell.subscription) $(ctxq client-prd .azPowerShell)"
+out=$(probe "$BASE/term/pwsh/ws?arg=client~14" "$TOKEN" "$BASE" '"azps=" + (Get-AzContext).Subscription.Name')
+grep -q 'azps=azps-client' <<<"$out" && pass "nouveau terminal PowerShell : contexte Az du workspace" || fail "Get-AzContext client : $(tail -c 300 <<<"$out")"
+out=$(probe "$BASE/term/pwsh/ws?arg=client-prd~14" "$TOKEN" "$BASE" '"azps=[" + (Get-AzContext).Subscription.Name + "]"')
+grep -q 'azps=\[\]' <<<"$out" && pass "terminal PowerShell d'un autre workspace : aucun contexte Az" || fail "Get-AzContext client-prd : $(tail -c 300 <<<"$out")"
+docker exec "$NAME" tmux kill-session -t '=client_pwsh_14'
+docker exec "$NAME" tmux kill-session -t '=client-prd_pwsh_14'
 probe "$BASE/term/pwsh/ws?arg=client~1" "$TOKEN" "$BASE" 'kubectl config use-context ctx2' >/dev/null
 expect "contexte kubectl propre au workspace" "ctx2 ctx1" "$(ctxq client .kubernetes.context) $(ctxq client-prd .kubernetes.context)"
 expect "kubeconfig commun inchangé" "ctx1" "$(docker exec "$NAME" sed -n 's/^current-context: //p' /home/dev/.kube/config)"

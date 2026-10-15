@@ -306,7 +306,7 @@ its own folders in `~/.cloudbox/identities/<id>/`, given to its terminals throug
 | GitHub CLI | `GH_CONFIG_DIR` | yes |
 | kubectl, k9s, helm (cluster access) | `KUBECONFIG=<workspace file>:~/.kube/config` | current context; clusters added with `az aks get-credentials` stay in the workspace, those of `~/.kube/config` are visible everywhere (with their namespace, which belongs to the context and is shared) |
 | Helm registries and repositories, kubelogin token cache, Docker credentials | their usual files in `/home/dev` | **no** |
-| Az PowerShell | none available | **no**: `Connect-AzAccount` is common to all workspaces, flagged in the toolbar |
+| Az PowerShell | `CLOUDBOX_AZPS_HOME` (see below) | yes: context and token cache of `Connect-AzAccount` |
 | CLI for Microsoft 365 | none available | **no** |
 | Graph, Exchange Online, Teams, PnP | in the PowerShell process | per terminal |
 
@@ -315,6 +315,11 @@ its own folders in `~/.cloudbox/identities/<id>/`, given to its terminals throug
 - **The VS Code terminal is not isolated**: code-server is a single instance for all workspaces,
   so its terminal uses the common sign-ins, like `docker exec`. Use the workspace's PowerShell and
   Bash panels for anything tied to a tenant.
+- Az PowerShell has no setting for its folder: it computes its paths from `HOME` once, when the
+  `Az.Accounts` module is imported. In an isolated workspace, the PowerShell profile imports it at
+  startup with `HOME` set to `~/.cloudbox/identities/<id>/azps` (then restores `HOME`), so the
+  `AzPS:` context is shown from the first prompt. Avoid `Clear-AzContext` in the VS Code terminal or
+  `docker exec`: it clears the common Az PowerShell context, not a workspace one.
 - az extensions stay common to all workspaces (`AZURE_EXTENSION_DIR`); `az config` defaults
   belong to the workspace.
 - A workspace can be switched to **shared** sign-ins (workspace ⚙, or when creating it): its

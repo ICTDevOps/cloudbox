@@ -27,6 +27,18 @@ Register-ArgumentCompleter -Native -CommandName az -ScriptBlock {
     Remove-Item $completionFile, Env:\_ARGCOMPLETE_STDOUT_FILENAME, Env:\ARGCOMPLETE_USE_TEMPFILES, Env:\COMP_LINE, Env:\COMP_POINT, Env:\_ARGCOMPLETE, Env:\_ARGCOMPLETE_SUPPRESS_SPACE, Env:\_ARGCOMPLETE_IFS, Env:\_ARGCOMPLETE_SHELL
 }
 
+# Az PowerShell isolé par workspace (CLOUDBOX_AZPS_HOME, posé par cloudbox-term) : Az.Accounts n'a pas
+# de réglage de dossier, il calcule ses chemins (contexte AzureRmContext.json, PSConfig.json, cache MSAL
+# sous .local/share) depuis HOME une seule fois, à son import. On l'importe donc ici, avant toute commande,
+# avec HOME pointé sur le dossier du workspace, puis on rétablit HOME (~ reste /home/dev). Ne pas
+# « isoler » avec Clear-AzContext : il viderait le contexte commun.
+if ($env:CLOUDBOX_AZPS_HOME -and -not (Get-Module Az.Accounts)) {
+    $cloudboxHome = $env:HOME
+    $env:HOME = $env:CLOUDBOX_AZPS_HOME
+    try { Import-Module Az.Accounts -ErrorAction SilentlyContinue } finally { $env:HOME = $cloudboxHome }
+    Remove-Variable cloudboxHome
+}
+
 # Prompt : workspace, dossier, branche git, contexte réel (az CLI, Az PowerShell, Kubernetes)
 function prompt {
     $ok = $?
@@ -73,7 +85,7 @@ function prompt {
         if ($sub) { $az = " $e[94maz:$($sub.name)$e[0m" }
     }
     # Az PowerShell : son propre contexte, distinct d'az CLI ; affiché seulement si Az.Accounts est
-    # déjà chargé (le charger à chaque prompt coûterait plusieurs secondes)
+    # déjà chargé (toujours le cas dans un workspace isolé ; sinon, le charger coûterait à chaque prompt)
     $azps = ''
     if (Get-Module Az.Accounts) {
         $ctx = Get-AzContext -ErrorAction SilentlyContinue

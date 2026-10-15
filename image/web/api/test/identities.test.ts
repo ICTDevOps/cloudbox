@@ -22,6 +22,16 @@ function azureProfile(dir: string, name: string) {
 azureProfile(path.join(home, '.azure'), 'abonnement-commun');
 azureProfile(path.join(home, '.cloudbox', 'identities', 'client-a', 'azure'), 'abonnement-a');
 
+// Contexte Az PowerShell enregistré par Az.Accounts (AzureRmContext.json)
+function azPsContext(dir: string, name: string) {
+  mkdirSync(dir, { recursive: true });
+  const ctx = { Subscription: { Name: name, Id: 's' }, Tenant: { Id: 't' }, Account: { Id: 'u@x' }, Environment: { Name: 'AzureCloud' } };
+  writeFileSync(path.join(dir, 'AzureRmContext.json'), JSON.stringify({ DefaultContextKey: 'k', Contexts: { k: ctx } }));
+}
+
+azPsContext(path.join(home, '.Azure'), 'azps-commun');
+azPsContext(path.join(home, '.cloudbox', 'identities', 'client-a', 'azps', '.Azure'), 'azps-a');
+
 test('mode : isolé par défaut, partagé sur demande, valeur stricte', () => {
   assert.equal(identityMode({}), 'isolated');
   assert.equal(identityMode({ identities: 'shared' }), 'shared');
@@ -38,8 +48,9 @@ test('variables : dossiers du workspace, kubeconfig en couches ; aucune en mode 
   assert.equal(env.AZD_CONFIG_DIR, path.join(dir, 'azd'));
   assert.equal(env.GH_CONFIG_DIR, path.join(dir, 'gh'));
   assert.equal(env.KUBECONFIG, `${path.join(dir, 'kube', 'config')}:${path.join(home, '.kube', 'config')}`);
+  assert.equal(env.CLOUDBOX_AZPS_HOME, path.join(dir, 'azps'));
   assert.deepEqual(identityEnv({ id: 'client-a', identities: 'shared' }), {});
-  assert.deepEqual(sharedTools({}), ['azPowerShell']);
+  assert.deepEqual(sharedTools({}), []);
   assert.equal(sharedTools({ identities: 'shared' }).length, 4);
 });
 
@@ -47,13 +58,16 @@ test('contexte : celui du workspace isolé, sinon la configuration commune', asy
   const base = { name: 'x', env: 'dev' as const, folder: home, nextPanel: 1, layout: null, created: '', updated: '' };
   const a = await cloudContext({ ...base, id: 'client-a' });
   assert.equal(a.azureCli?.subscription, 'abonnement-a');
+  assert.equal(a.azPowerShell?.subscription, 'azps-a');
   assert.equal(a.identities, 'isolated');
   assert.equal(a.sharedAcrossWorkspaces, false);
   // Workspace isolé jamais connecté : pas de repli sur la connexion commune
   const b = await cloudContext({ ...base, id: 'client-b' });
   assert.equal(b.azureCli, null);
+  assert.equal(b.azPowerShell, null);
   const shared = await cloudContext({ ...base, id: 'client-b', identities: 'shared' });
   assert.equal(shared.azureCli?.subscription, 'abonnement-commun');
+  assert.equal(shared.azPowerShell?.subscription, 'azps-commun');
   assert.equal(shared.sharedAcrossWorkspaces, true);
   const common = await cloudContext();
   assert.equal(common.azureCli?.subscription, 'abonnement-commun');

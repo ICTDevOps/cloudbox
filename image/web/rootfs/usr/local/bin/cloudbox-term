@@ -40,8 +40,8 @@ folder=$(jq -r '.folder // empty' "$state" 2>/dev/null) || folder=
 folder=$(realpath -e -- "${folder:-$home}" 2>/dev/null) || folder=$home
 [[ $folder == "$home" || $folder == "$home"/* ]] || folder=$home
 
-# Connexions du workspace : isolées (défaut) ou partagées. En mode isolé, az, azd, gh et le contexte
-# Kubernetes ont leurs dossiers dans ~/.cloudbox/identities/<workspace>/ (mêmes variables que
+# Connexions du workspace : isolées (défaut) ou partagées. En mode isolé, az, azd, Az PowerShell, gh et
+# le contexte Kubernetes ont leurs dossiers dans ~/.cloudbox/identities/<workspace>/ (mêmes variables que
 # identityEnv dans cloudbox-api). Le mode est fixé à l'ouverture de la session tmux : un terminal
 # déjà ouvert garde le sien (CLOUDBOX_IDENTITIES, lu par l'API et par le prompt).
 identities=$(jq -r '.identities // "isolated"' "$state" 2>/dev/null) || identities=isolated
@@ -49,13 +49,16 @@ identities=$(jq -r '.identities // "isolated"' "$state" 2>/dev/null) || identiti
 envs=(-e "CLOUDBOX_WORKSPACE=$workspace" -e "CLOUDBOX_IDENTITIES=$identities")
 if [[ $identities == isolated ]]; then
     ids=$home/.cloudbox/identities/$workspace
-    (umask 077 && mkdir -p "$ids/azure" "$ids/azd" "$ids/gh" "$ids/kube")
+    (umask 077 && mkdir -p "$ids/azure" "$ids/azd" "$ids/gh" "$ids/kube" "$ids/azps/.Azure" "$ids/azps/.local/share")
+    # Az PowerShell : HOME de l'import d'Az.Accounts (profile.ps1) ; télémétrie coupée comme dans ~/.Azure
+    [[ -e $ids/azps/.Azure/PSConfig.json || ! -r /etc/skel/.Azure/PSConfig.json ]] ||
+        install -m 600 /etc/skel/.Azure/PSConfig.json "$ids/azps/.Azure/PSConfig.json"
     # kubeconfig du workspace : contexte courant et clusters ajoutés ici ; ~/.kube/config reste lu
     [[ -s $ids/kube/config ]] || (umask 077 && printf 'apiVersion: v1\nkind: Config\n' > "$ids/kube/config")
     # Extensions az (outils, pas identités) : communes à tous les workspaces
     envs+=(-e "AZURE_CONFIG_DIR=$ids/azure" -e "AZURE_EXTENSION_DIR=$home/.azure/cliextensions"
            -e "AZD_CONFIG_DIR=$ids/azd" -e "GH_CONFIG_DIR=$ids/gh"
-           -e "KUBECONFIG=$ids/kube/config:$home/.kube/config")
+           -e "KUBECONFIG=$ids/kube/config:$home/.kube/config" -e "CLOUDBOX_AZPS_HOME=$ids/azps")
 fi
 
 # Session <workspace>_<shell>_<n> : « _ » est exclu des identifiants de workspace

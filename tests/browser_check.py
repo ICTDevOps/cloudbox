@@ -128,7 +128,7 @@ with sync_playwright() as p:
     check("URL du workspace", page.url.endswith(f"#/w/{WS_ID}"), page.url)
     check("cadre PRD", page.locator(f"{A}.env-frame-prd").count() == 1)
     check("puce « connexions isolées »", page.locator(f"{A} .chip-isolated").count() == 1)
-    check("Az PowerShell signalé comme commun", page.locator(f"{A} .chip .chip-shared").count() == 1)
+    check("aucun outil signalé comme commun", page.locator(f"{A} .chip .chip-shared").count() == 0)
     check("workspace dans la barre latérale, actif", page.locator(f".sidebar a.nav-item.active[href='#/w/{WS_ID}']").count() == 1)
     page.wait_for_timeout(8000)  # chargement des terminaux et de VS Code
     check("trois panneaux par défaut", tab_titles(page) == ["Bash 2", "PowerShell 1", "VS Code"], tab_titles(page))
@@ -385,6 +385,17 @@ with sync_playwright() as p:
     check("Échap ferme le menu tmux", "Horizontal Split" not in (terminal_text(page, bash_frame) or ""))
     page.set_viewport_size({"width": 1400, "height": 900})
 
+    # --- Connexions isolées : faux profils az, Az PowerShell et contexte kubectl écrits dans ce workspace ---
+    page.locator(bash_frame).click()
+    page.keyboard.press("Control+U")
+    page.keyboard.type(
+        "clear; d=~/.cloudbox/identities/" + WS_ID + "; "
+        "printf '{\"subscriptions\":[{\"id\":\"1\",\"name\":\"abo-iso\",\"tenantId\":\"t\",\"isDefault\":true,\"user\":{\"name\":\"u\"}}]}' > $d/azure/azureProfile.json; "
+        "printf '{\"DefaultContextKey\":\"k\",\"Contexts\":{\"k\":{\"Subscription\":{\"Id\":\"s\",\"Name\":\"azps-iso\"},\"Account\":{\"Id\":\"u\"},\"Tenant\":{\"Id\":\"t\"}}}}' > $d/azps/.Azure/AzureRmContext.json; "
+        "kubectl config set-context ctx-iso --cluster=c --user=u >/dev/null && kubectl config use-context ctx-iso")
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(2000)
+
     # --- Navigation entre workspaces par la barre latérale, sans rechargement ---
     pwsh_frame = f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']"
     origin_before = page.locator(pwsh_frame).evaluate("f => f.contentWindow.performance.timeOrigin")
@@ -395,6 +406,9 @@ with sync_playwright() as p:
     page.wait_for_timeout(4000)
     check("second workspace ouvert", page.url.endswith("#/w/projet-b"), page.url)
     check("deux workspaces dans la barre", page.locator(".sidebar .nav-list a.nav-item").count() == 2)
+    bar_b = page.locator(f"{A} .context-bar").inner_text()
+    check("second workspace : aucune connexion du premier (az, Az PS, kubectl)",
+          not any(v in bar_b for v in ("abo-iso", "azps-iso", "ctx-iso")), bar_b)
     check("deux workspaces gardés ouverts", page.locator(".sidebar .alive-dot").count() == 2)
     page.click(f".sidebar a.nav-item[href='#/w/{WS_ID}']")
     page.wait_for_timeout(1500)
@@ -411,6 +425,10 @@ with sync_playwright() as p:
     page.reload()
     page.wait_for_selector(f"{A} .dv-tab", timeout=20000)
     check("repli conservé après rechargement", page.locator(".sidebar.collapsed").count() == 1)
+    page.wait_for_selector(f"{A} .context-bar .chip-isolated", timeout=10000)
+    bar_a = page.locator(f"{A} .context-bar").inner_text()
+    check("premier workspace : ses connexions (az, Az PS, kubectl)",
+          all(v in bar_a for v in ("abo-iso", "azps-iso", "ctx-iso")), bar_a)
     page.screenshot(path=f"{OUT}/6-barre-repliee.png")
     page.click(".sidebar-toggle")
 
