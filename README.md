@@ -1,8 +1,10 @@
 # Cloudbox
 
 A **local Cloud Shell for Azure and Microsoft 365**: a Docker container that runs on your own PC
-and is used from the browser, with a web terminal (PowerShell and Bash), VS Code in the browser
-and every Azure / Microsoft 365 administration tool, kept up to date.
+and is used from the browser, with a web terminal (PowerShell and Bash), VS Code in the browser,
+a **dedicated AI assistant** and every Azure / Microsoft 365 administration tool, kept up to date.
+The assistant helps with every task of an administration session (optional, bring your own API
+key; see [AI assistant](#ai-assistant-optional)).
 
 > **Status: step 2 (workspaces).** The `:cli` and `:web` images build and pass their tests
 > (HTTP and browser). The technical framing and the roadmap are in [`CLAUDE.md`](CLAUDE.md)
@@ -50,6 +52,8 @@ browser ──http://localhost:8080──▶ cloudbox container
   No central server.
 - Reachable **from the PC only** (`127.0.0.1`), protected by a token.
 - Classic terminal access still works: `docker exec -it cloudbox pwsh`.
+- A **built-in AI assistant** works next to your terminals: it knows the workspace, reads what is
+  actually signed in, and proposes the commands you approve.
 
 ## Run the prebuilt image (no build needed)
 
@@ -332,8 +336,21 @@ its own folders in `~/.cloudbox/identities/<id>/`, given to its terminals throug
 
 ## AI assistant (optional)
 
-Each workspace can open an **Assistant** panel that helps during the session: it reads the actual
-context, the workspace terminals and files, and proposes commands that you approve.
+Cloudbox includes a **dedicated AI agent for Azure and Microsoft 365 administration**. Each
+workspace can open an **Assistant** panel that helps with every task of the session: it reads the
+actual context, the workspace terminals and files, and proposes commands that you approve.
+
+What it helps with, for example:
+
+- **Diagnosing**: reading a terminal's error and explaining it, checking which tenant,
+  subscription or cluster is really in use, comparing it with the declared environment.
+- **Writing commands and scripts**: az, Az PowerShell, Microsoft Graph, Exchange Online, Teams,
+  PnP, CLI for Microsoft 365, kubectl, helm, OpenTofu/Terraform, Bicep, gh.
+- **Running them safely**: each command is shown on a card, run only after your approval, and its
+  output read back to check the result.
+- **Working with the workspace files**: reading scripts, templates and configuration in the
+  workspace folder to explain or adapt them.
+- **Remembering the context**: your `AGENTS.md` instructions and the notes it keeps per workspace.
 
 - **Disabled by default.** Enable it in **Settings → AI assistant** (sidebar), enter an API key and
   pick a default model (the list is read from the provider). A workspace can use its own model
