@@ -79,6 +79,8 @@ function Get-CloudboxRuntime([hashtable]$Config) {
 function Invoke-CloudboxRuntime {
     param([string]$Runtime, [string[]]$Arguments, [switch]$Quiet, [switch]$AllowFailure)
     if ($Quiet) {
+        # Windows PowerShell 5.1 : avec « Stop », une ligne de stderr redirigée devient une erreur bloquante
+        $ErrorActionPreference = 'Continue'
         $out = & $Runtime @Arguments 2>&1
         $code = $LASTEXITCODE
         if ($code -ne 0 -and -not $AllowFailure) { throw "$Runtime $($Arguments[0]) : échec ($code) $($out | Out-String)" }
