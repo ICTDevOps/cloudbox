@@ -32,6 +32,31 @@ for m in Az.Accounts Az.Resources Microsoft.Graph.Authentication Microsoft.Graph
     fi
 done
 
+section "Connect-Cloudbox (-WhatIf, paramètres du workspace)"
+# Faux workspace avec tenant, abonnement et ClientId : commandes attendues, rien n'est lancé
+connect_ws='New-Item -ItemType Directory -Force ~/.cloudbox/workspaces | Out-Null
+@{ id = "demo"; settings = @{ tenant = "contoso.onmicrosoft.com"; subscription = "11111111-2222-3333-4444-555555555555"; clientId = "3f2a8c1e-5b7d-4e9a-a1c2-7d6e5f4b3a21" } } |
+    ConvertTo-Json | Set-Content ~/.cloudbox/workspaces/demo.json'
+out=$(docker run --rm -e CLOUDBOX_WORKSPACE=demo "$IMAGE" pwsh -NoLogo -Command "$connect_ws
+Connect-Cloudbox -Services All -WhatIf" 2>&1 | tr -d '\r')
+for want in 'az login --use-device-code --tenant contoso.onmicrosoft.com' \
+            'Connect-AzAccount -UseDeviceAuthentication -Tenant contoso.onmicrosoft.com -Subscription 11111111-2222-3333-4444-555555555555' \
+            'Connect-MgGraph -UseDeviceCode -Scopes User.Read.All -NoWelcome -TenantId contoso.onmicrosoft.com' \
+            'Connect-ExchangeOnline -Device' 'Connect-MicrosoftTeams -UseDeviceAuthentication -TenantId contoso.onmicrosoft.com' \
+            'Connect-PnPOnline -Url https://contoso.sharepoint.com -DeviceLogin -ClientId 3f2a8c1e-5b7d-4e9a-a1c2-7d6e5f4b3a21' \
+            'm365 login --authType deviceCode --tenant contoso.onmicrosoft.com --appId 3f2a8c1e-5b7d-4e9a-a1c2-7d6e5f4b3a21'; do
+    grep -qF -- "$want" <<<"$out" && pass "${want%% *} ${want#* }" || fail "commande absente : $want"
+done
+grep -qi 'error\|erreur' <<<"$out" && fail "erreurs affichées : $(grep -i 'error\|erreur' <<<"$out" | head -n 3)" || pass "aucune erreur affichée"
+out=$(docker run --rm -e CLOUDBOX_WORKSPACE=demo "$IMAGE" pwsh -NoLogo -Command "$connect_ws
+Connect-Cloudbox -Services PnP -ClientId '' -WhatIf" 2>&1 | tr -d '\r')
+grep -q 'ClientId' <<<"$out" && ! grep -q 'Connect-PnPOnline' <<<"$out" && pass "PnP ignoré sans ClientId" || fail "PnP sans ClientId : $out"
+# Teams : appelée depuis le module, Connect-MicrosoftTeams doit être l'enveloppe du profil (compte retenu)
+expect "Connect-MicrosoftTeams vue du module : enveloppe du profil" "Function" \
+    "$(run pwsh -NoLogo -Command '& (Import-Module Cloudbox.Connect -PassThru) { (Get-Command Connect-MicrosoftTeams).CommandType }' 2>&1 | tr -d '\r' | tail -n 1)"
+out=$(run pwsh -NoLogo -Command 'try { Connect-Cloudbox -Tenant "a;b" -WhatIf; "accepted" } catch { "refused" }' 2>&1 | tr -d '\r')
+expect "tenant invalide refusé" "refused" "$(tail -n 1 <<<"$out")"
+
 section "sudo"
 if run bash -c 'sudo -n true' >/dev/null 2>&1; then fail "sudo accepté sans CLOUDBOX_SUDO"; else pass "sudo refusé par défaut"; fi
 if docker run --rm -e CLOUDBOX_SUDO=true "$IMAGE" bash -c 'sudo -n true' >/dev/null 2>&1; then
