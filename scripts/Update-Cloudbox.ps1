@@ -52,6 +52,10 @@ try {
         return
     }
 
+    # Container créé à la main (docker run) : ses réglages ne sont pas connus des scripts
+    $reason = Get-CloudboxForeignReason $container
+    if ($reason -and -not $Force) { throw "mise à jour arrêtée : $reason" }
+
     Update-CloudboxImage $runtime $config.Image -Quiet
     $newId = (Invoke-CloudboxRuntime $runtime @('image', 'inspect', '-f', '{{.Id}}', $config.Image) -Quiet) -join ''
     if ($newId -eq $container.Image -and $image -eq $config.Image) { Write-UpdateLog "Cloudbox est à jour ($($config.Image))."; return }

@@ -302,7 +302,7 @@ par tenant dans `/home/dev/.cloudbox/tenants/` (notamment le `ClientId` PnP).
     (`~/.local/share/cloudbox` ailleurs), enregistre ses paramètres dans `cloudbox.local.psd1`, crée sous
     Windows la tâche planifiée `Cloudbox-Update` (chaque jour et à l'ouverture de session) et les profils
     Windows Terminal par fragment JSON (`docker exec -it cloudbox pwsh|bash`), affiche l'URL et le
-    jeton. Sans clone : `& ([scriptblock]::Create((irm …/scripts/Install-Cloudbox.ps1)))` télécharge
+    jeton. Sans clone : `& ([scriptblock]::Create((irm …/scripts/Install-Cloudbox.ps1).TrimStart([char]0xFEFF)))` (BOM retiré : il casse `[scriptblock]::Create`) télécharge
     les scripts de `main`.
   - Update : `docker pull`, recrée le container si l'image a changé, sauf si un terminal est ouvert
     (`SkipUpdateWhenBusy` : client tmux attaché, ou processus lancé par `docker exec`, de parent 0 dans

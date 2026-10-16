@@ -3,7 +3,7 @@
     Installe Cloudbox sur ce poste : volume, container, mise à jour quotidienne, profil Windows Terminal.
 .DESCRIPTION
     Depuis un clone :      scripts/Install-Cloudbox.ps1 [-Port 8081] [-Token …]
-    Sans clone (Windows) : & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/scripts/Install-Cloudbox.ps1)))
+    Sans clone (Windows) : & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/scripts/Install-Cloudbox.ps1).TrimStart([char]0xFEFF)))
 
     Les scripts et la configuration sont copiés dans %LOCALAPPDATA%\Cloudbox (~/.local/share/cloudbox
     sous Linux et macOS) ; les paramètres passés sont enregistrés dans config/cloudbox.local.psd1 et
@@ -22,7 +22,9 @@ param(
     # Jeton d'accès imposé (16 caractères minimum) ; sinon généré au premier démarrage et conservé
     [string]$Token,
     [switch]$NoScheduledTask,
-    [switch]$NoTerminalProfile
+    [switch]$NoTerminalProfile,
+    # Recrée un container du même nom qui n'a pas été créé par ces scripts (Docker Compose, docker run)
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,6 +66,10 @@ Update-CloudboxImage $runtime $config.Image
 Invoke-CloudboxRuntime $runtime @('volume', 'create', $config.Volume) -Quiet | Out-Null
 
 $existing = Get-CloudboxContainer $runtime $name
+if ($existing -and -not $Force) {
+    $reason = Get-CloudboxForeignReason $existing
+    if ($reason) { throw "Installation arrêtée : $reason" }
+}
 if ($existing) {
     Write-Host "Container « $name » existant : recréé (volume $($config.Volume) conservé)."
     Invoke-CloudboxRuntime $runtime @('rm', '-f', $name) -Quiet | Out-Null

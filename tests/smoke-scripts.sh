@@ -40,6 +40,13 @@ done
 pass "BOM UTF-8 sur les scripts"
 
 section "Install-Cloudbox.ps1"
+# Container du même nom créé ailleurs (docker run, Docker Compose) : jamais remplacé sans -Force
+docker create --name "$ID" "$IMAGE" >/dev/null
+foreign=$(cid)
+out=$(ps Install-Cloudbox.ps1 -Image "$IMAGE" -ContainerName "$ID" -Volume "$ID" -Port "$PORT" -NoScheduledTask -NoTerminalProfile)
+grep -q 'Installation arrêtée' <<<"$out" && [[ $(cid) == "$foreign" ]] &&
+    pass "container créé ailleurs : installation refusée, container intact" || fail "container créé ailleurs : $out"
+docker rm -f "$ID" >/dev/null
 out=$(ps Install-Cloudbox.ps1 -Image "$IMAGE" -ContainerName "$ID" -Volume "$ID" -Port "$PORT" -NoScheduledTask -NoTerminalProfile)
 token=$(sed -n "s/^ Jeton d'accès : //p" <<<"$out")
 if grep -q "Cloudbox est prêt : http://localhost:$PORT" <<<"$out" && [[ ${#token} -ge 16 ]]; then

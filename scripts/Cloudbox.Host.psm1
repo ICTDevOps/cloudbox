@@ -106,6 +106,18 @@ function Get-CloudboxContainer([string]$Runtime, [string]$Name) {
     $info
 }
 
+# Container créé par ces scripts (label posé par Get-CloudboxRunArguments) ; sinon, message d'explication
+function Get-CloudboxForeignReason($Container) {
+    $labels = $Container.Config.Labels
+    $get = { param($k) if ($labels) { $p = $labels.PSObject.Properties[$k]; if ($p) { "$($p.Value)" } } }
+    if ((& $get 'io.cloudbox.managed') -eq 'scripts') { return $null }
+    $project = & $get 'com.docker.compose.project'
+    if ($project) {
+        return "le container « $($Container.Name.TrimStart('/')) » a été créé par Docker Compose (projet $project) : ses variables (.env : clés de l'assistant…) seraient perdues. « docker compose down » d'abord, ou -Force."
+    }
+    "le container « $($Container.Name.TrimStart('/')) » n'a pas été créé par ces scripts : ses réglages seraient remplacés par ceux de config/. -Force pour le recréer quand même."
+}
+
 # Arguments de « run » : mêmes réglages que compose.yaml (port sur 127.0.0.1 seulement, pas de socket
 # Docker, pas de mode privilégié)
 function Get-CloudboxRunArguments([hashtable]$Config, [string]$Token) {

@@ -88,7 +88,7 @@ ghcr.io/ictdevops/cloudbox:web
 One command, in Windows PowerShell or PowerShell 7, with Docker Desktop running:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/scripts/Install-Cloudbox.ps1)))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/scripts/Install-Cloudbox.ps1).TrimStart([char]0xFEFF)))
 ```
 
 From a clone: `scripts/Install-Cloudbox.ps1`. Options: `-Port 8081`, `-Image …`, `-Token …`,
