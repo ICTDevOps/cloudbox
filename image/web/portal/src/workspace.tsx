@@ -6,7 +6,8 @@ import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type Workspace } from './api';
 import { AssistantPanel, assistantConfigStore, useAssistantConfig } from './assistant';
-import { ConnectionsDrawer } from './connections';
+import { ConnectionsDrawer, connectCommand } from './connections';
+import type { ServiceId } from './connstatus';
 import { ContextBar, refreshCloudContext } from './context';
 import { CONNECTIONS_EVENT, isConnectionsShortcut, mountDock, type DockHandle } from './dock';
 import { EnvBadge, TopBar } from './home';
@@ -165,6 +166,26 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
     settingsDialog.current?.showModal();
   };
 
+  // Pastille grise de la barre de contexte : commande de connexion saisie (sans Entrée) dans le dernier
+  // terminal utilisé qui sait la lancer ; à défaut, l'aide-mémoire s'ouvre
+  const connect = async (service: ServiceId) => {
+    if (!ws) return;
+    const target = dock?.terminalFor('pwsh') ?? dock?.terminalFor('bash') ?? null;
+    const command = target && connectCommand(service, target.kind, ws.settings);
+    if (!target || !command) {
+      setError(t().context.needPwsh);
+      toggleDrawer(true);
+      return;
+    }
+    try {
+      await api.sendInput(ws.id, target.session, command);
+      setError('');
+      dock?.focusPanel(target.panelId);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const openDelete = () => {
     setDeleteKey((k) => k + 1);
     deleteDialog.current?.showModal();
@@ -241,7 +262,7 @@ export function WorkspaceView({ id, active }: { id: string; active: boolean }) {
           </button>
         )}
         {error && <span class="error">{error}</span>}
-        <ContextBar wsId={ws.id} settings={ws.settings} onOpen={() => toggleDrawer(true)} />
+        <ContextBar wsId={ws.id} settings={ws.settings} onOpen={() => toggleDrawer(true)} onConnect={connect} />
       </div>
       <div class="ws-body">
         <Dock ws={ws} onReady={setDock} onError={setError} />

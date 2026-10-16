@@ -2,7 +2,7 @@
 // panneau « Connexions » du workspace (copier, insérer dans un terminal) et aide-mémoire de l'accueil.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, type CloudContext, type Workspace, type WorkspaceSettings } from './api';
-import { serviceStatuses, type ServiceId } from './connstatus';
+import { CONNECT_SERVICE, serviceStatuses, type ServiceId } from './connstatus';
 import { useCloudContext } from './context';
 import type { DockHandle, TerminalRef } from './dock';
 import { t } from './i18n';
@@ -45,6 +45,9 @@ export function connectionCommands(s: WorkspaceSettings = {}): ConnectionCommand
   const spo = sharepointUrl(s);
   const [azure, m365, tools] = [m.groupAzure, m.groupM365, m.groupTools];
 
+  // Connect-Cloudbox enchaîne les connexions ci-dessous avec les paramètres du workspace
+  add({ id: 'cloudbox', group: 'Cloudbox', label: m.connectAll, shell: 'pwsh' }, ['Connect-Cloudbox -Services All']);
+
   add({ id: 'az', group: azure, label: 'Azure CLI', shell: 'any', status: 'az' },
     ['az login --use-device-code', tenant && `--tenant ${tenant}`]);
   add({ id: 'az-sub', group: azure, label: m.azSub, shell: 'any', status: 'az' },
@@ -70,6 +73,14 @@ export function connectionCommands(s: WorkspaceSettings = {}): ConnectionCommand
 
   add({ id: 'gh', group: tools, label: 'GitHub CLI', shell: 'any', status: 'github' }, ['gh auth login']);
   return cmds;
+}
+
+// Commande saisie par un clic sur une pastille grise de la barre de contexte : Connect-Cloudbox dans un
+// terminal PowerShell, la commande native de l'aide-mémoire dans Bash (az, m365 seulement)
+export function connectCommand(id: ServiceId, shell: 'pwsh' | 'bash', s: WorkspaceSettings = {}): string | null {
+  if (shell === 'pwsh') return `Connect-Cloudbox -Services ${CONNECT_SERVICE[id]}`;
+  if (id !== 'az' && id !== 'm365') return null;
+  return connectionCommands(s).find((c) => c.id === id)?.command ?? null;
 }
 
 type Status = { state: 'on' | 'off' | 'warn'; text: string; title?: string };

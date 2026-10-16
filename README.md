@@ -292,7 +292,9 @@ and VS Code in a panel layout (resizable, rearranged by drag and drop).
   signed in to another tenant or subscription than the workspace ones.
 - A PRD workspace is framed in red, and the prompt of its shells carries a `PRD <id>` badge.
 - **What is actually signed in** (right of the workspace toolbar), read and never declared, in
-  three groups (a click opens the cheat sheet):
+  three groups. A click on a grey (not signed in) service types its sign-in command,
+  `Connect-Cloudbox -Services <service>`, into the last PowerShell terminal used, without running
+  it; a click on any other service opens the cheat sheet:
   - **Azure**: az CLI (subscription of the workspace configuration) and Az PowerShell (saved
     context, plus the context of each PowerShell terminal);
   - **M365**: Graph, Exchange Online, Teams and PnP, whose sessions live in each PowerShell
@@ -394,8 +396,21 @@ What it helps with, for example:
 
 ## Signing in to the services (device code)
 
-In a workspace, the **Cheat sheet** panel provides these commands already completed (tenant,
-subscription, SharePoint URL, ClientId).
+In a PowerShell terminal, **`Connect-Cloudbox`** signs in to several services in one go, with the
+tenant, subscription, SharePoint URL and ClientId declared in the workspace settings:
+
+```powershell
+Connect-Cloudbox                          # Az PowerShell and Microsoft Graph
+Connect-Cloudbox -Services EXO,Teams      # AzCli, Az, Graph, EXO, Teams, PnP, M365, or All
+Connect-Cloudbox -Services All -WhatIf    # show the commands without running them
+```
+
+Services already signed in to the right tenant are skipped (`-Force` signs in again), PnP is
+skipped without a ClientId, and a failure does not stop the next services. Explicit parameters
+(`-Tenant`, `-Subscription`, `-SharePointUrl`, `-ClientId`, `-GraphScopes`) override the workspace
+values.
+
+In a workspace, the **Cheat sheet** panel also provides each command already completed.
 
 | Service | Command |
 |---|---|

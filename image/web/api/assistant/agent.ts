@@ -95,7 +95,9 @@ async function systemPrompt(o: TurnOptions): Promise<string> {
       : 'Connexions partagées : az, Az PowerShell et kubectl sont communs à tous les workspaces en mode partagé.') +
       ' Graph, Exchange, Teams, PnP et le contexte Az PowerShell du processus sont propres à chaque terminal PowerShell : ' +
       '« terminals » liste ceux qui ont une session ouverte (absent de la liste = non connecté). Une commande qui en ' +
-      'dépend doit viser un terminal connecté. Si l\'abonnement ou le tenant réel diffère de celui déclaré, signale-le ' +
+      'dépend doit viser un terminal connecté. Pour connecter un terminal PowerShell, propose ' +
+      '`Connect-Cloudbox -Services <AzCli|Az|Graph|EXO|Teams|PnP|M365>` (paramètres du workspace, device code : ' +
+      'l\'utilisateur suit le code affiché dans le terminal). Si l\'abonnement ou le tenant réel diffère de celui déclaré, signale-le ' +
       'avant toute commande.',
     '```json',
     JSON.stringify(context, null, 2),

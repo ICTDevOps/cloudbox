@@ -62,7 +62,7 @@ export const TOOLS: ToolSpec[] = [
       "puis la valide ou la refuse ; si elle est validée, elle est lancée dans son terminal actif et tu reçois la " +
       'sortie. Une seule ligne, non interactive (pas de confirmation à saisir, pas de pager). ' +
       'Les connexions PowerShell (Connect-MgGraph, Connect-ExchangeOnline…) sont celles du terminal visé : ' +
-      'voir « terminals » dans le contexte réel.',
+      'voir « terminals » dans le contexte réel ; pour en ouvrir une : Connect-Cloudbox -Services <service>.',
     parameters: {
       type: 'object',
       properties: {

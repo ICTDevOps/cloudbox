@@ -165,6 +165,15 @@ with sync_playwright() as p:
     check("focus rendu au terminal après le clic", page.evaluate("document.activeElement?.getAttribute('src') || ''").startswith("/term/bash/"))
     page.keyboard.press("Control+U")
 
+    # --- Pastille grise de la barre de contexte : Connect-Cloudbox saisi dans le terminal PowerShell ---
+    page.click(f"{A} .context-bar button.svc.off[data-svc=graph]")
+    page.wait_for_timeout(1000)
+    last = [l for l in (terminal_text(page, f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']") or "").split("\n") if l.strip()][-2:-1]
+    check("clic sur une pastille grise : Connect-Cloudbox saisi, non exécuté",
+          bool(last) and last[0].rstrip().endswith("Connect-Cloudbox -Services Graph"), last)
+    check("focus rendu au terminal PowerShell", page.evaluate("document.activeElement?.getAttribute('src') || ''").startswith("/term/pwsh/"))
+    page.keyboard.press("Escape")
+
     # --- Onglet Terminal des paramètres : appliqué à chaud aux terminaux ouverts ---
     term_font = "() => window.term ? [window.term.options.fontSize, window.term.options.theme?.background ?? null] : null"
     pwsh_body = page.frame_locator(f"{A} iframe[src^='/term/pwsh/?arg={WS_ID}~1']").locator("body")

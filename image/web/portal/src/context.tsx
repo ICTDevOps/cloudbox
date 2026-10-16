@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { api, type CloudContext, type WorkspaceSettings } from './api';
-import { serviceStatuses, type ServiceStatus } from './connstatus';
+import { serviceStatuses, type ServiceId, type ServiceStatus } from './connstatus';
 import { t } from './i18n';
 import { Icon, type IconName } from './icons';
 
@@ -61,56 +61,78 @@ export function useCloudContext(wsId = ''): ContextState {
   return ctx;
 }
 
-function ServiceItem({ st, showValue }: { st: ServiceStatus; showValue: boolean }) {
+// Pastille d'un service. Dans un workspace, c'est un bouton : non connecté, il saisit la commande de
+// connexion dans un terminal (onConnect) ; sinon il ouvre l'aide-mémoire (détail et commandes)
+function ServiceItem({ st, showValue, onOpen, onConnect }: {
+  st: ServiceStatus;
+  showValue: boolean;
+  onOpen?: () => void;
+  onConnect?: (id: ServiceId) => void;
+}) {
+  const m = t().context;
   const count = st.terminals.length > 1 ? ` ×${st.terminals.length}` : '';
-  return (
-    <span class={`svc ${st.state}`} data-svc={st.id} title={st.detail.join('\n')}>
+  const content = (
+    <>
       <span class="svc-dot" aria-hidden="true" />
       <span class="svc-label">{st.label}</span>
       {showValue && st.value && <span class="svc-value">{st.value}</span>}
       {count && <span class="svc-count">{count}</span>}
-      <span class="sr-only"> ({st.state === 'off' ? t().context.notConnected : st.text})</span>
-    </span>
+      <span class="sr-only"> ({st.state === 'off' ? m.notConnected : st.text})</span>
+    </>
   );
+  const action = st.state === 'off' && onConnect ? () => onConnect(st.id) : onOpen;
+  const hint = st.state === 'off' && onConnect ? m.clickConnect : onOpen ? m.openSheet : '';
+  const title = [...st.detail, hint].filter(Boolean).join('\n');
+  return action
+    ? <button type="button" class={`svc ${st.state}`} data-svc={st.id} title={title} onClick={action}>{content}</button>
+    : <span class={`svc ${st.state}`} data-svc={st.id} title={title}>{content}</span>;
 }
 
-// Groupe de services ; un clic ouvre l'aide-mémoire (détail et commandes de connexion) quand il existe
-// Nom du groupe en infobulle : l'icône suffit à l'écran, la place va aux services
-function Group({ name, icon, onOpen, hint, children }: { name: string; icon: IconName; onOpen?: () => void; hint: string; children: ComponentChildren }) {
-  const content = <><Icon name={icon} size={15} /><span class="sr-only">{name}</span>{children}</>;
-  const title = [name, hint].filter(Boolean).join(' — ');
+// Groupe de services, nom en infobulle : l'icône suffit à l'écran, la place va aux services
+function Group({ name, icon, children }: { name: string; icon: IconName; children: ComponentChildren }) {
+  return <span class="ctx-group" title={name}><Icon name={icon} size={15} /><span class="sr-only">{name}</span>{children}</span>;
+}
+
+// Contexte Kubernetes (pas de connexion en un clic : le cluster se choisit) : ouvre l'aide-mémoire
+function Kube({ class: cls, title, onOpen, children }: { class: string; title: string; onOpen?: () => void; children: ComponentChildren }) {
+  const full = [title, onOpen && t().context.openSheet].filter(Boolean).join('\n');
   return onOpen
-    ? <button type="button" class="ctx-group" onClick={onOpen} title={title}>{content}</button>
-    : <span class="ctx-group" title={name}>{content}</span>;
+    ? <button type="button" class={cls} data-svc="kube" title={full} onClick={onOpen}>{children}</button>
+    : <span class={cls} data-svc="kube" title={full}>{children}</span>;
 }
 
 // wsId : contexte des terminaux de ce workspace (connexions isolées ou partagées, sessions de chaque
-// terminal PowerShell) ; sans : contexte commun. onOpen : ouvre l'aide-mémoire des connexions.
-export function ContextBar({ wsId, settings, onOpen }: { wsId?: string; settings?: WorkspaceSettings; onOpen?: () => void }) {
+// terminal PowerShell) ; sans : contexte commun. onOpen : ouvre l'aide-mémoire des connexions ; onConnect :
+// saisit la commande de connexion d'un service non connecté.
+export function ContextBar({ wsId, settings, onOpen, onConnect }: {
+  wsId?: string;
+  settings?: WorkspaceSettings;
+  onOpen?: () => void;
+  onConnect?: (id: ServiceId) => void;
+}) {
   const ctx = useCloudContext(wsId);
   const m = t().context;
   if (ctx === null) return <div class="context-bar muted">{m.loading}</div>;
   if (ctx === 'error') return <div class="context-bar muted">{m.unavailable}</div>;
   const sep = document.documentElement.lang === 'fr' ? ' : ' : ': ';
   const services = serviceStatuses(ctx, settings, Boolean(wsId));
-  const hint = onOpen ? m.openSheet : '';
   // Az PS : abonnement affiché seulement s'il diffère de celui d'az (sinon en infobulle)
   const azValue = services.find((s) => s.id === 'az')?.value;
   const showValue = (st: ServiceStatus) => st.id === 'az' || (st.id === 'azps' && st.value !== azValue);
   const group = (g: 'azure' | 'm365') =>
-    services.filter((s) => s.group === g).map((s) => <ServiceItem key={s.id} st={s} showValue={showValue(s)} />);
+    services.filter((s) => s.group === g).map((s) => <ServiceItem key={s.id} st={s} showValue={showValue(s)} onOpen={onOpen} onConnect={onConnect} />);
   return (
     <div class="context-bar" aria-label={m.label}>
-      <Group name="Azure" icon="azure" onOpen={onOpen} hint={hint}>{group('azure')}</Group>
-      <Group name="Microsoft 365" icon="m365" onOpen={onOpen} hint={hint}>{group('m365')}</Group>
-      <Group name="Kubernetes" icon="kubernetes" onOpen={onOpen} hint={hint}>
+      <Group name="Azure" icon="azure">{group('azure')}</Group>
+      <Group name="Microsoft 365" icon="m365">{group('m365')}</Group>
+      <Group name="Kubernetes" icon="kubernetes">
         {ctx.kubernetes ? (
-          <span class="svc on" data-svc="kube" title={`${m.kubeContext}${sep}${ctx.kubernetes.context}\n${m.namespace}${sep}${ctx.kubernetes.namespace}`}>
+          <Kube class="svc on" onOpen={onOpen} title={`${m.kubeContext}${sep}${ctx.kubernetes.context}\n${m.namespace}${sep}${ctx.kubernetes.namespace}`}>
             <span class="svc-label">{ctx.kubernetes.context}</span>
             <span class="svc-value">{ctx.kubernetes.namespace}</span>
-          </span>
+          </Kube>
         ) : (
-          <span class="svc off" data-svc="kube"><span class="svc-dot" aria-hidden="true" /> {m.noContext}</span>
+          <Kube class="svc off" onOpen={onOpen} title={m.noContext}><span class="svc-dot" aria-hidden="true" /> {m.noContext}</Kube>
         )}
       </Group>
       {wsId && (ctx.identities === 'isolated' ? (

@@ -31,6 +31,11 @@ export const SERVICES: Record<ServiceId, { label: string; name: string; group: S
   m365: { label: 'm365', name: 'CLI for Microsoft 365', group: 'm365' },
 };
 
+// Nom du service pour Connect-Cloudbox -Services (module Cloudbox.Connect de l'image)
+export const CONNECT_SERVICE: Record<ServiceId, string> = {
+  az: 'AzCli', azps: 'Az', graph: 'Graph', exo: 'EXO', teams: 'Teams', pnp: 'PnP', m365: 'M365',
+};
+
 // Services propres à chaque terminal, dans l'ordre d'affichage
 export const TERMINAL_SERVICES: readonly TerminalService[] = ['azps', 'graph', 'exo', 'teams', 'pnp'];
 

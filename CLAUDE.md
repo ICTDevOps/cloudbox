@@ -284,9 +284,13 @@ Inchangée par rapport à WSLC : **device code flow** (`az login --use-device-co
 `Connect-MgGraph -UseDeviceCode`, `Connect-ExchangeOnline -Device`, etc.). Le portail affiche un
 aide-mémoire de ces commandes.
 
-Étape ultérieure : un module PowerShell `Cloudbox.Connect` avec
-`Connect-Cloudbox -Tenant <tenant> -Services Az,Graph,EXO,Teams,PnP` et un fichier de config
-par tenant dans `/home/dev/.cloudbox/tenants/` (notamment le `ClientId` PnP).
+Module PowerShell `Cloudbox.Connect` (image `:cli`, `$PSHOME/Modules`) :
+`Connect-Cloudbox [-Services AzCli,Az,Graph,EXO,Teams,PnP,M365|All] [-Tenant] [-Subscription]
+[-SharePointUrl] [-ClientId] [-Force] [-WhatIf]` enchaîne ces commandes avec les paramètres du
+workspace du terminal (champ `settings`, mêmes règles de validation que l'API), saute les services
+déjà connectés au bon tenant, ignore PnP sans ClientId, et ne s'arrête pas sur un échec. Un clic sur
+une pastille grise de la barre de contexte saisit `Connect-Cloudbox -Services <X>` (sans Entrée) dans
+le dernier terminal PowerShell utilisé (commande native pour az et m365 dans Bash).
 
 ## Côté poste (scripts)
 
@@ -378,7 +382,7 @@ connexions (az / Graph / EXO), upload/download de fichiers.
 
 ### Plus tard, en option
 
-- Scripts PowerShell côté poste, module `Cloudbox.Connect`.
+- Scripts PowerShell côté poste.
 
 ### Hors périmètre pour l'instant
 
