@@ -95,6 +95,10 @@ jobs:
           path: tests/browser-out/
           if-no-files-found: ignore
 
+      # pwsh et PSScriptAnalyzer : préinstallés sur les runners Ubuntu de GitHub
+      - name: Scripts côté poste (Install / Update / Uninstall, PSScriptAnalyzer)
+        run: tests/smoke-scripts.sh cloudbox:web
+
       # --entrypoint : sans s6, dont les messages (bandeau, Caddy) iraient dans le fichier
       - name: Versions des outils et paquets Ubuntu
         run: |
