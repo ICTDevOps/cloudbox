@@ -118,6 +118,12 @@ If Windows refuses to run the scripts (execution policy), run them with
 `powershell -ExecutionPolicy Bypass -File <script>`. Podman works too (`Runtime = 'podman'` in
 `cloudbox.local.psd1`).
 
+The scripts are optional: options 2 and 3 work without them. They never recreate a container they did
+not create, so its settings (variables, assistant keys) are not lost: on a container started with
+`docker run` or Docker Compose, `Install-Cloudbox.ps1` and `Update-Cloudbox.ps1` stop with an
+explanation unless `-Force` is given. One exception: `Update-Cloudbox.ps1` updates a Docker Compose
+container the Compose way (`compose pull`, then `up -d`), keeping its `.env` variables.
+
 ### Option 2: `docker run`
 
 ```bash
