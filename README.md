@@ -83,7 +83,42 @@ ghcr.io/ictdevops/cloudbox:web
 > the network. To use Cloudbox running on another machine, go through an SSH tunnel
 > (`ssh -L 8080:localhost:8080 <host>`) or a private network such as Tailscale, not `0.0.0.0`.
 
-### Option 1: `docker run`
+### Option 1: install script (Windows, also Linux and macOS)
+
+One command, in Windows PowerShell or PowerShell 7, with Docker Desktop running:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ICTDevOps/cloudbox/main/scripts/Install-Cloudbox.ps1)))
+```
+
+From a clone: `scripts/Install-Cloudbox.ps1`. Options: `-Port 8081`, `-Image …`, `-Token …`,
+`-Shell bash`, `-Sudo`, `-NoScheduledTask`, `-NoTerminalProfile`.
+
+The script pulls the image, creates the `cloudbox-home` volume and the container (port on
+`127.0.0.1` only), then prints the URL and the access token. On Windows it also adds:
+
+- a scheduled task, **Cloudbox-Update**, run every day and at logon: it pulls the image and recreates
+  the container when the image changed, **unless a terminal is open** (browser terminal or
+  `docker exec`), in which case it waits for the next run;
+- two **Windows Terminal** profiles, *Cloudbox (PowerShell)* and *Cloudbox (Bash)*, which open a shell
+  in the container.
+
+Scripts and settings are copied to `%LOCALAPPDATA%\Cloudbox` (`~/.local/share/cloudbox` on Linux and
+macOS). The options passed are saved in `config/cloudbox.local.psd1`, which overrides
+`config/cloudbox.psd1`, and reused by the updates.
+
+| Action | Command (in `%LOCALAPPDATA%\Cloudbox\scripts`) |
+|---|---|
+| Update now | `.\Update-Cloudbox.ps1` (`-Force` even if a terminal is open) |
+| Shell without the browser | `.\Enter-Cloudbox.ps1` (`-Shell bash`) |
+| Remove (sign-ins and files are kept in the volume) | `.\Uninstall-Cloudbox.ps1` |
+| Remove everything | `.\Uninstall-Cloudbox.ps1 -RemoveData` |
+
+If Windows refuses to run the scripts (execution policy), run them with
+`powershell -ExecutionPolicy Bypass -File <script>`. Podman works too (`Runtime = 'podman'` in
+`cloudbox.local.psd1`).
+
+### Option 2: `docker run`
 
 ```bash
 docker run -d --name cloudbox --hostname cloudbox --restart unless-stopped \
@@ -117,7 +152,7 @@ Open **http://localhost:8080** and paste the token.
 | Remove (sign-ins and files are kept in the volume) | `docker rm -f cloudbox` |
 | Remove everything | `docker rm -f cloudbox && docker volume rm cloudbox-home` |
 
-### Option 2: Docker Compose
+### Option 3: Docker Compose
 
 Create a folder with a `compose.yaml` file containing:
 

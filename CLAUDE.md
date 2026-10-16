@@ -293,12 +293,23 @@ par tenant dans `/home/dev/.cloudbox/tenants/` (notamment le `ClientId` PnP).
 - `compose.yaml` à la racine : image `:web`, volume `cloudbox-home:/home/dev`,
   port `127.0.0.1:8080:8080`, `restart: unless-stopped`, variables `TZ`, `CLOUDBOX_TOKEN`,
   `CLOUDBOX_SUDO`.
-- Scripts PowerShell écrits pour Cloudbox, sur le modèle fonctionnel de WSLC, pour `docker` (avec détection de `wslc` en option) :
-  `Install-Cloudbox.ps1`, `Update-Cloudbox.ps1`, `Enter-Cloudbox.ps1`, `Uninstall-Cloudbox.ps1`.
-  - Install : crée le volume et le container, la tâche planifiée de mise à jour, le profil
-    Windows Terminal (`docker exec -it cloudbox pwsh`), affiche l'URL et le jeton.
-  - Update : `docker pull`, recrée le container si l'image a changé, ne le fait pas si une session
-    est active (tmux attaché ou terminal ouvert) — reprendre la logique `SkipUpdateWhenBusy`.
+- Scripts PowerShell écrits pour Cloudbox (`scripts/`), sur le modèle fonctionnel de WSLC, pour
+  `docker` ou `podman` (`Runtime`) ; **compatibles Windows PowerShell 5.1** (lance la tâche planifiée)
+  et PowerShell 7, enregistrés en UTF-8 **avec BOM** (sinon accents illisibles sous 5.1) ; fonctions
+  communes dans `Cloudbox.Host.psm1`. wslc n'est pas géré (CLI à vérifier avant de l'ajouter).
+  - Install : crée le volume et le container (mêmes réglages que `compose.yaml`, label
+    `io.cloudbox.managed=scripts`), copie scripts et configuration dans `%LOCALAPPDATA%\Cloudbox`
+    (`~/.local/share/cloudbox` ailleurs), enregistre ses paramètres dans `cloudbox.local.psd1`, crée sous
+    Windows la tâche planifiée `Cloudbox-Update` (chaque jour et à l'ouverture de session) et les profils
+    Windows Terminal par fragment JSON (`docker exec -it cloudbox pwsh|bash`), affiche l'URL et le
+    jeton. Sans clone : `& ([scriptblock]::Create((irm …/scripts/Install-Cloudbox.ps1)))` télécharge
+    les scripts de `main`.
+  - Update : `docker pull`, recrée le container si l'image a changé, sauf si un terminal est ouvert
+    (`SkipUpdateWhenBusy` : client tmux attaché, ou processus lancé par `docker exec`, de parent 0 dans
+    le container) ; `-Force` passe outre. Container de Docker Compose : `compose pull` puis `up -d`.
+  - Enter : démarre le container si besoin, `docker exec -it`. Uninstall : volume conservé, sauf
+    `-RemoveData` (confirmation).
+  - Test : `tests/smoke-scripts.sh` (CI, avec PSScriptAnalyzer et `scripts/PSScriptAnalyzerSettings.psd1`).
 - `config/cloudbox.psd1` + `config/cloudbox.local.psd1` (ignoré par git), comme dans WSLC.
 
 ## Structure cible du dépôt
