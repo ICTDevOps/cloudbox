@@ -91,7 +91,7 @@ ARG EXT_TERRAFORM_VERSION=2.40.0
 # renovate: datasource=custom.openvsx depName=opentofu.vscode-opentofu
 ARG EXT_OPENTOFU_VERSION=0.6.3
 # renovate: datasource=custom.openvsx depName=redhat.vscode-yaml
-ARG EXT_YAML_VERSION=1.25.0
+ARG EXT_YAML_VERSION=2.0.0
 # renovate: datasource=custom.openvsx depName=ms-kubernetes-tools.vscode-kubernetes-tools
 ARG EXT_KUBERNETES_VERSION=1.4.1
 RUN --mount=type=bind,source=image/cli/build,target=/build \
