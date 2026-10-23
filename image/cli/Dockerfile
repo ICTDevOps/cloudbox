@@ -171,7 +171,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- GitHub CLI ---
 # renovate: datasource=github-releases depName=cli/cli extractVersion=^v(?<version>.+)$
-ARG GH_VERSION=2.102.0
+ARG GH_VERSION=2.102.1
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" \
