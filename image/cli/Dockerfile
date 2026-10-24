@@ -68,7 +68,7 @@ RUN . /etc/os-release \
 
 # --- Azure Developer CLI (pas de somme publiée dans la release) ---
 # renovate: datasource=github-releases depName=Azure/azure-dev extractVersion=^azure-dev-cli_(?<version>.+)$
-ARG AZD_VERSION=1.37.0
+ARG AZD_VERSION=1.37.1
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && a=$(arch_name amd64 arm64) \
