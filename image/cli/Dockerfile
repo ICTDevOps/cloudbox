@@ -183,7 +183,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- OpenTofu ---
 # renovate: datasource=github-releases depName=opentofu/opentofu extractVersion=^v(?<version>.+)$
-ARG OPENTOFU_VERSION=1.13.1
+ARG OPENTOFU_VERSION=1.13.2
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz" \
