@@ -246,7 +246,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- AzCopy (pas de somme publiée dans la release) ---
 # renovate: datasource=github-releases depName=Azure/azure-storage-azcopy extractVersion=^v(?<version>.+)$
-ARG AZCOPY_VERSION=10.34.0
+ARG AZCOPY_VERSION=10.34.1
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && d="azcopy_linux_${TARGETARCH}_${AZCOPY_VERSION}" \
