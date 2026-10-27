@@ -207,7 +207,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- kubelogin ---
 # renovate: datasource=github-releases depName=Azure/kubelogin extractVersion=^v(?<version>.+)$
-ARG KUBELOGIN_VERSION=0.2.21
+ARG KUBELOGIN_VERSION=0.2.22
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="kubelogin-linux-${TARGETARCH}.zip" \
