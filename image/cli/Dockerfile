@@ -87,7 +87,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- PowerShell 7 ---
 # renovate: datasource=github-releases depName=PowerShell/PowerShell extractVersion=^v(?<version>.+)$
-ARG POWERSHELL_VERSION=7.6.8
+ARG POWERSHELL_VERSION=7.6.9
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="powershell-${POWERSHELL_VERSION}-linux-$(arch_name x64 arm64).tar.gz" \
