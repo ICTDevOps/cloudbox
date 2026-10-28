@@ -72,7 +72,7 @@ RUN --mount=type=bind,source=image/cli/build,target=/build \
 
 # --- code-server (VS Code web ; pas de somme publiée dans la release) ---
 # renovate: datasource=github-releases depName=coder/code-server extractVersion=^v(?<version>.+)$
-ARG CODE_SERVER_VERSION=4.141.0
+ARG CODE_SERVER_VERSION=4.143.1
 RUN --mount=type=bind,source=image/cli/build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="code-server-${CODE_SERVER_VERSION}-linux-${TARGETARCH}.tar.gz" \
