@@ -149,7 +149,7 @@ RUN npm install --global --no-audit "@pnp/cli-microsoft365@${CLI_M365_VERSION}" 
 
 # --- kubectl ---
 # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.+)$
-ARG KUBECTL_VERSION=1.37.1
+ARG KUBECTL_VERSION=1.37.2
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && url="https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
