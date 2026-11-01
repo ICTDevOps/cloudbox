@@ -8,8 +8,8 @@
     "dev": "vite"
   },
   "dependencies": {
-    "dockview": "8.8.0",
-    "dockview-core": "8.8.0",
+    "dockview": "8.8.1",
+    "dockview-core": "8.8.1",
     "preact": "11.1.0"
   },
   "devDependencies": {
