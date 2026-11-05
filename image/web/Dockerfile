@@ -87,7 +87,7 @@ RUN --mount=type=bind,source=image/cli/build,target=/build \
 # renovate: datasource=custom.openvsx depName=ms-vscode.powershell
 ARG EXT_POWERSHELL_VERSION=2025.4.0
 # renovate: datasource=custom.openvsx depName=hashicorp.terraform
-ARG EXT_TERRAFORM_VERSION=2.40.0
+ARG EXT_TERRAFORM_VERSION=2.40.1
 # renovate: datasource=custom.openvsx depName=opentofu.vscode-opentofu
 ARG EXT_OPENTOFU_VERSION=0.6.3
 # renovate: datasource=custom.openvsx depName=redhat.vscode-yaml
