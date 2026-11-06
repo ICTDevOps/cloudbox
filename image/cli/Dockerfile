@@ -55,7 +55,7 @@ RUN userdel -r ubuntu 2>/dev/null || true \
 
 # --- Azure CLI (dépôt apt Microsoft par version d'Ubuntu, amd64 + arm64) ---
 # renovate: datasource=github-releases depName=Azure/azure-cli extractVersion=^azure-cli-(?<version>.+)$
-ARG AZURE_CLI_VERSION=2.91.0
+ARG AZURE_CLI_VERSION=2.92.0
 RUN . /etc/os-release \
  && install -d -m 0755 /etc/apt/keyrings \
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
