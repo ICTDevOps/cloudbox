@@ -60,7 +60,7 @@ RUN bash /tmp/ttyd-index/ttyd-index.sh /usr/share/cloudbox/ttyd/index.html \
 
 # --- Caddy (reverse proxy, authentification, portail) ---
 # renovate: datasource=github-releases depName=caddyserver/caddy extractVersion=^v(?<version>.+)$
-ARG CADDY_VERSION=2.11.7
+ARG CADDY_VERSION=2.11.8
 RUN --mount=type=bind,source=image/cli/build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="caddy_${CADDY_VERSION}_linux_${TARGETARCH}.tar.gz" \
