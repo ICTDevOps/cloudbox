@@ -79,7 +79,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- Bicep (pas de somme publiée dans la release) ---
 # renovate: datasource=github-releases depName=Azure/bicep extractVersion=^v(?<version>.+)$
-ARG BICEP_VERSION=0.48.1
+ARG BICEP_VERSION=0.49.2
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh \
  && fetch "https://github.com/Azure/bicep/releases/download/v${BICEP_VERSION}/bicep-linux-$(arch_name x64 arm64)" /usr/local/bin/bicep \
