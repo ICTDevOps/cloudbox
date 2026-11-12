@@ -266,7 +266,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- yq (mikefarah) ---
 # renovate: datasource=github-releases depName=mikefarah/yq extractVersion=^v(?<version>.+)$
-ARG YQ_VERSION=4.54.2
+ARG YQ_VERSION=4.54.3
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && f="yq_linux_${TARGETARCH}" \
