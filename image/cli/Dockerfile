@@ -143,7 +143,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- CLI for Microsoft 365 ---
 # renovate: datasource=npm depName=@pnp/cli-microsoft365
-ARG CLI_M365_VERSION=11.11.0
+ARG CLI_M365_VERSION=12.0.0
 RUN npm install --global --no-audit "@pnp/cli-microsoft365@${CLI_M365_VERSION}" \
  && npm cache clean --force
 
