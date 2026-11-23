@@ -257,7 +257,7 @@ RUN --mount=type=bind,source=build,target=/build \
 
 # --- sqlcmd (go-sqlcmd, pas de somme publiée dans la release) ---
 # renovate: datasource=github-releases depName=microsoft/go-sqlcmd extractVersion=^v(?<version>.+)$
-ARG SQLCMD_VERSION=1.10.0
+ARG SQLCMD_VERSION=1.11.0
 RUN --mount=type=bind,source=build,target=/build \
     . /build/fetch.sh && cd /tmp \
  && fetch "https://github.com/microsoft/go-sqlcmd/releases/download/v${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" sqlcmd.tbz \
